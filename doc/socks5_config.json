@@ -3,9 +3,9 @@
   "logger": {
     "version": 1,
     "handlers": {
-      "console": { "class": "logging.StreamHandler", "level": "INFO" }
+      "console": { "class": "logging.StreamHandler", "level": "DEBUG" }
     },
-    "loggers": { "proxy": { "level": "INFO", "handlers": ["console"] } }
+    "loggers": { "proxy": { "level": "DEBUG", "handlers": ["console"] } }
   },
   "server": {
     "inbound": {
