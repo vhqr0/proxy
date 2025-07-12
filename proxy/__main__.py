@@ -22,10 +22,12 @@ def main(args):
     plugins = config["plugins"]
     for plugin in plugins:
         import_module(plugin)
-    if "logger" in config:
-        logging.config.dictConfig(config["logger"])
+    logging.config.dictConfig(config["logger"])
     server = ServerConfig.from_data(config["server"])
-    aio.run(server.start_server())
+    try:
+        aio.run(server.start_server())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

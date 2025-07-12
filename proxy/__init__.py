@@ -645,10 +645,13 @@ class Server:
             async def outbound_callback(
                 out_reader: AsyncReader, out_writer: AsyncWriter
             ):
-                await aio.gather(
-                    self.pipe(in_reader, out_writer),
-                    self.pipe(out_reader, in_writer),
-                )
+                try:
+                    await aio.gather(
+                        self.pipe(in_reader, out_writer),
+                        self.pipe(out_reader, in_writer),
+                    )
+                except Exception:
+                    pass
 
             await self.outbound.open_connection(host, port, outbound_callback)
 
