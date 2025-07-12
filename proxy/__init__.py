@@ -194,6 +194,24 @@ class AIOWriter(AsyncWriter):
         await self.writer.drain()
 
 
+def pipe(reader: Reader, writer: Writer):
+    while True:
+        b = reader.read()
+        if len(b) == 0:
+            return
+        else:
+            writer.write(b)
+
+
+async def pipe_async(reader: AsyncReader, writer: AsyncWriter):
+    while True:
+        b = await reader.read_async()
+        if len(b) == 0:
+            return
+        else:
+            await writer.write_async(b)
+
+
 class Struct(ABC):
     @abstractmethod
     def read(self, reader: Reader) -> Any:
@@ -635,6 +653,7 @@ class Server:
         self.inbound = inbound
         self.outbound = outbound
         self.logger = logger or logging.getLogger("proxy")
+        self.tasks: set[aio.Task] = set()
 
     async def start_server(self):
         async def inbound_callback(
@@ -645,26 +664,23 @@ class Server:
             async def outbound_callback(
                 out_reader: AsyncReader, out_writer: AsyncWriter
             ):
+                task1 = aio.create_task(pipe_async(in_reader, out_writer))
+                task2 = aio.create_task(pipe_async(out_reader, in_writer))
+                for task in task1, task2:
+                    self.tasks.add(task)
+                    task.add_done_callback(self.tasks.discard)
                 try:
-                    await aio.gather(
-                        self.pipe(in_reader, out_writer),
-                        self.pipe(out_reader, in_writer),
-                    )
+                    await aio.gather(task1, task2)
                 except Exception:
                     pass
+                finally:
+                    for task in task1, task2:
+                        if not task.cancelled():
+                            task.cancel()
 
             await self.outbound.open_connection(host, port, outbound_callback)
 
         await self.inbound.start_server(inbound_callback)
-
-    @staticmethod
-    async def pipe(reader: AsyncReader, writer: AsyncWriter):
-        while True:
-            b = await reader.read_async()
-            if len(b) == 0:
-                return
-            else:
-                await writer.write_async(b)
 
 
 class Config(ABC):
