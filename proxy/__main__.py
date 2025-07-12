@@ -2,6 +2,7 @@ import sys
 from argparse import ArgumentParser
 from importlib import import_module
 import json
+import logging.config
 import asyncio as aio
 from proxy import ServerConfig
 
@@ -21,6 +22,8 @@ def main(args):
     plugins = config["plugins"]
     for plugin in plugins:
         import_module(plugin)
+    if "logger" in config:
+        logging.config.dictConfig(config["logger"])
     server = ServerConfig.from_data(config["server"])
     aio.run(server.start_server())
 

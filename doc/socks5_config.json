@@ -1,5 +1,12 @@
 {
   "plugins": ["proxy.plugins.socks5"],
+  "logger": {
+    "version": 1,
+    "handlers": {
+      "console": { "class": "logging.StreamHandler", "level": "INFO" }
+    },
+    "loggers": { "proxy": { "level": "INFO", "handlers": ["console"] } }
+  },
   "server": {
     "inbound": {
       "type": "proxy",

@@ -1,8 +1,9 @@
-from typing import Any
+from typing import Any, Optional
 from collections.abc import Callable, Awaitable, Iterable
 from abc import ABC, abstractmethod
 import struct as format_struct
 import random
+import logging
 import io
 import asyncio as aio
 
@@ -625,14 +626,22 @@ class RandDispatchOutBound(OutBound):
 
 
 class Server:
-    def __init__(self, inbound: InBound, outbound: OutBound):
+    def __init__(
+        self,
+        inbound: InBound,
+        outbound: OutBound,
+        logger: Optional[logging.Logger] = None,
+    ):
         self.inbound = inbound
         self.outbound = outbound
+        self.logger = logger or logging.getLogger("proxy")
 
     async def start_server(self):
         async def inbound_callback(
             in_reader: AsyncReader, in_writer: AsyncWriter, host: str, port: int
         ):
+            self.logger.info("connect to %s %d", host, port)
+
             async def outbound_callback(
                 out_reader: AsyncReader, out_writer: AsyncWriter
             ):
