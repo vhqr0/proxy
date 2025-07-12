@@ -66,9 +66,25 @@ def sha256_hash(data: bytes) -> bytes:
     return sha256(data).digest()
 
 
+def md5_hash(data: bytes) -> bytes:
+    return md5(data).digest()
+
+
 def vmess_hash(keys: Iterable[bytes], data: bytes) -> bytes:
     hash_fn = reduce(derive_hash_fn, keys, sha256_hash)
     return hash_fn(data)
+
+
+def aesecb_encrypt(key: bytes, data: bytes) -> bytes:
+    return Cipher(AES(key), ECB()).encryptor().update(data)
+
+
+def aesgcm_encrypt(key: bytes, iv: bytes, data: bytes, aad: bytes = b"") -> bytes:
+    return AESGCM(key).encrypt(iv, data, aad)
+
+
+def aesgcm_decrypt(key: bytes, iv: bytes, data: bytes, aad: bytes = b"") -> bytes:
+    return AESGCM(key).decrypt(iv, data, aad)
 
 
 def fnv1a(data: bytes) -> int:
@@ -80,22 +96,10 @@ def fnv1a(data: bytes) -> int:
     return r
 
 
-def aesecb_encrypt(key: bytes, data: bytes) -> bytes:
-    return Cipher(AES(key), ECB()).encryptor().update(data)
-
-
-def aesgcm_encrypt(key: bytes, iv: bytes, data: bytes, aad: bytes) -> bytes:
-    return AESGCM(key).encrypt(iv, data, aad)
-
-
-def aesgcm_decrypt(key: bytes, iv: bytes, data: bytes, aad: bytes) -> bytes:
-    return AESGCM(key).decrypt(iv, data, aad)
-
-
 class VMessID(UUID):
     @cached_property
     def cmd_key(self):
-        return md5(self.bytes + VMESS_MAGIC).digest()
+        return md5_hash(self.bytes + VMESS_MAGIC)
 
     @cached_property
     def auth_key(self):
@@ -107,14 +111,18 @@ class VMessID(UUID):
         aid += st_uint32_be.pack_one(crc32(aid))
         eaid = aesecb_encrypt(self.auth_key, aid)
         nonce = randbytes(8)
-        elen_key = vmess_hash([VMESS_KDF, VMESS_REQ_LEN_KEY, eaid, nonce], self.cmd_key)
-        elen_iv = vmess_hash([VMESS_KDF, VMESS_REQ_LEN_IV, eaid, nonce], self.cmd_key)
         elen = aesgcm_encrypt(
-            elen_key[:16], elen_iv[:12], st_uint16_be.pack_one(len(req)), eaid
+            vmess_hash([VMESS_KDF, VMESS_REQ_LEN_KEY, eaid, nonce], self.cmd_key)[:16],
+            vmess_hash([VMESS_KDF, VMESS_REQ_LEN_IV, eaid, nonce], self.cmd_key)[:12],
+            st_uint16_be.pack_one(len(req)),
+            eaid,
         )
-        ereq_key = vmess_hash([VMESS_KDF, VMESS_REQ_KEY, eaid, nonce], self.cmd_key)
-        ereq_iv = vmess_hash([VMESS_KDF, VMESS_REQ_IV, eaid, nonce], self.cmd_key)
-        ereq = aesgcm_encrypt(ereq_key[:16], ereq_iv[:12], req, eaid)
+        ereq = aesgcm_encrypt(
+            vmess_hash([VMESS_KDF, VMESS_REQ_KEY, eaid, nonce], self.cmd_key)[:16],
+            vmess_hash([VMESS_KDF, VMESS_REQ_IV, eaid, nonce], self.cmd_key)[:12],
+            req,
+            eaid,
+        )
         return eaid + elen + nonce + ereq
 
 
@@ -187,15 +195,19 @@ class VMessReader(BufferedAsyncReader):
 
     async def read_decrypt_resp_async(self):
         elen = await self.reader.readexactly_async(18)
-        elen_key = vmess_hash([VMESS_KDF, VMESS_RESP_LEN_KEY], self.key)
-        elen_iv = vmess_hash([VMESS_KDF, VMESS_RESP_LEN_IV], self.iv)
         _len = st_uint16_be.unpack_one(
-            aesgcm_decrypt(elen_key[:16], elen_iv[:12], elen, b"")
+            aesgcm_decrypt(
+                vmess_hash([VMESS_KDF, VMESS_RESP_LEN_KEY], self.key)[:16],
+                vmess_hash([VMESS_KDF, VMESS_RESP_LEN_IV], self.iv)[:12],
+                elen,
+            )
         )
         eresp = await self.reader.readexactly_async(_len + 16)
-        eresp_key = vmess_hash([VMESS_KDF, VMESS_RESP_KEY], self.key)
-        eresp_iv = vmess_hash([VMESS_KDF, VMESS_RESP_IV], self.iv)
-        resp = aesgcm_decrypt(eresp_key[:16], eresp_iv[:12], eresp, b"")
+        resp = aesgcm_decrypt(
+            vmess_hash([VMESS_KDF, VMESS_RESP_KEY], self.key)[:16],
+            vmess_hash([VMESS_KDF, VMESS_RESP_IV], self.iv)[:12],
+            eresp,
+        )
         if resp[0] != self.verify or resp[1:] != b"\x00\x00\x00":
             raise Exception("Invalid vmess resp")
 
