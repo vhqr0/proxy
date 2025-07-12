@@ -1,4 +1,4 @@
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 from time import time
 from random import randbytes, getrandbits
 from functools import reduce, cached_property

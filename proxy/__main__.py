@@ -16,11 +16,9 @@ parser.add_argument("-c", "--config", default="config.json")
 
 def main(args):
     args = parser.parse_args(args)
-    config_path = args.config
-    with open(config_path, "r") as f:
+    with open(args.config, "r") as f:
         config = json.load(f)
-    plugins = config["plugins"]
-    for plugin in plugins:
+    for plugin in config["plugins"]:
         import_module(plugin)
     logging.config.dictConfig(config["logger"])
     server = ServerConfig.from_data(config["server"])
