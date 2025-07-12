@@ -671,8 +671,8 @@ class Server:
                     task.add_done_callback(self.tasks.discard)
                 try:
                     await aio.gather(task1, task2)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug("except while piping: %s %s", type(e), e)
                 finally:
                     for task in task1, task2:
                         if not task.cancelled():

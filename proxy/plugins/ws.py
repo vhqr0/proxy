@@ -17,8 +17,9 @@ from proxy import (
 
 
 class WSReader(BufferedAsyncReader):
-    def __init__(self, ws: ws_conn.Connection):
+    def __init__(self, ws: ws_conn.Connection, **kwargs):
         self.ws = ws
+        super().__init__(**kwargs)
 
     async def read1_async(self) -> bytes:
         try:

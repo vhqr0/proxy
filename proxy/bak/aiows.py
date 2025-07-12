@@ -13,8 +13,13 @@ from proxy import (
 
 
 class AIOWSReader(BufferedAsyncReader):
-    def __init__(self, ws: aiowsc.ClientWebSocketResponse | aioweb.WebSocketResponse):
+    def __init__(
+        self,
+        ws: aiowsc.ClientWebSocketResponse | aioweb.WebSocketResponse,
+        **kwargs,
+    ):
         self.ws = ws
+        super().__init__(**kwargs)
 
     async def read1_async(self) -> bytes:
         msg = await self.ws.receive()

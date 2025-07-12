@@ -103,14 +103,14 @@ class VMessID(UUID):
 
     def encrypt_req(self, req: bytes):
         req += st_uint32_be.pack_one(fnv1a(req))
-        aid = st_uint64_be.pack_one(time()) + randbytes(4)
+        aid = st_uint64_be.pack_one(int(time())) + randbytes(4)
         aid += st_uint32_be.pack_one(crc32(aid))
         eaid = aesecb_encrypt(self.auth_key, aid)
         nonce = randbytes(8)
-        req_len = st_uint16_be.pack_one(len(req))
+        _len = st_uint16_be.pack_one(len(req))
         elen_key = vmess_hash([VMESS_KDF, VMESS_REQ_LEN_KEY, eaid, nonce], self.cmd_key)
         elen_iv = vmess_hash([VMESS_KDF, VMESS_REQ_LEN_IV, eaid, nonce], self.cmd_key)
-        elen = aesgcm_encrypt(elen_key[:16], elen_iv[:12], req_len, eaid)
+        elen = aesgcm_encrypt(elen_key[:16], elen_iv[:12], _len, eaid)
         ereq_key = vmess_hash([VMESS_KDF, VMESS_REQ_KEY, eaid, nonce], self.cmd_key)
         ereq_iv = vmess_hash([VMESS_KDF, VMESS_REQ_IV, eaid, nonce], self.cmd_key)
         ereq = aesgcm_encrypt(ereq_key[:16], ereq_iv[:12], req, eaid)
@@ -159,6 +159,7 @@ st_vmess_req = DictStruct(
         ("opt", st_uint8),
         ("plen_sec", st_uint8),
         ("keep", st_uint8),
+        ("cmd", st_uint8),
         ("port", st_uint16_be),
         ("atype", st_uint8),
         ("host", st_socks5_str),
@@ -167,13 +168,21 @@ st_vmess_req = DictStruct(
 
 
 class VMessReader(BufferedAsyncReader):
-    def __init__(self, key: bytes, iv: bytes, verify: int, reader: AsyncReader):
+    def __init__(
+        self,
+        key: bytes,
+        iv: bytes,
+        verify: int,
+        reader: AsyncReader,
+        **kwargs,
+    ):
         self.key = key
         self.iv = iv
         self.verify = verify
         self.reader = reader
         self.cryptor = VMessCryptor(key, iv)
         self.wait_resp = True
+        super().__init__(**kwargs)
 
     async def read_decrypt_resp_async(self):
         elen = await self.reader.readexactly_async(18)
@@ -228,7 +237,7 @@ class VMessWriter(AsyncWriter):
                 "iv": self.iv,
                 "key": self.key,
                 "v": self.verify,
-                "opts": 5,  # M | S
+                "opt": 5,  # M | S
                 "plen_sec": (plen << 4) + 3,  # AESGCM
                 "keep": 0,
                 "cmd": 1,  # TCP
