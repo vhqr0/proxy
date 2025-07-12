@@ -57,7 +57,7 @@ def derive_hash_fn(
     okey = bytes(_okey)
 
     def new_hasn_fn(data: bytes) -> bytes:
-        return hash_fn(ikey + hash_fn(okey + data))
+        return hash_fn(okey + hash_fn(ikey + data))
 
     return new_hasn_fn
 
@@ -107,10 +107,11 @@ class VMessID(UUID):
         aid += st_uint32_be.pack_one(crc32(aid))
         eaid = aesecb_encrypt(self.auth_key, aid)
         nonce = randbytes(8)
-        _len = st_uint16_be.pack_one(len(req))
         elen_key = vmess_hash([VMESS_KDF, VMESS_REQ_LEN_KEY, eaid, nonce], self.cmd_key)
         elen_iv = vmess_hash([VMESS_KDF, VMESS_REQ_LEN_IV, eaid, nonce], self.cmd_key)
-        elen = aesgcm_encrypt(elen_key[:16], elen_iv[:12], _len, eaid)
+        elen = aesgcm_encrypt(
+            elen_key[:16], elen_iv[:12], st_uint16_be.pack_one(len(req)), eaid
+        )
         ereq_key = vmess_hash([VMESS_KDF, VMESS_REQ_KEY, eaid, nonce], self.cmd_key)
         ereq_iv = vmess_hash([VMESS_KDF, VMESS_REQ_IV, eaid, nonce], self.cmd_key)
         ereq = aesgcm_encrypt(ereq_key[:16], ereq_iv[:12], req, eaid)
@@ -267,7 +268,7 @@ class VMessClient(ProxyClient):
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
     ) -> tuple[AsyncReader, AsyncWriter]:
         key, iv = randbytes(16), randbytes(16)
-        rkey, riv = sha256_hash(key)[:16], sha256_hash(key)[:16]
+        rkey, riv = sha256_hash(key)[:16], sha256_hash(iv)[:16]
         verify = getrandbits(8)
         return (
             VMessReader(rkey, riv, verify, reader),
