@@ -86,11 +86,13 @@ class Socks5Server(ProxyServer):
         auth_req = await st_socks5_auth_req.read_async(reader)
         if auth_req["ver"] != 5 or 0 not in auth_req["meths"]:
             raise Exception("Invalid socks5 auth req", auth_req)
-        await st_socks5_auth_resp.write_async(writer, {"ver": 5, "meth": 0})
+        await st_socks5_auth_resp.pack_one_then_write_async(
+            writer, {"ver": 5, "meth": 0}
+        )
         req = await st_socks5_req.read_async(reader)
         if req["ver"] != 5 or req["cmd"] != 1:
             raise Exception("Invalid socks5 req", req)
-        await st_socks5_resp.write_async(
+        await st_socks5_resp.pack_one_then_write_async(
             writer,
             {
                 "ver": 5,
@@ -106,11 +108,13 @@ class Socks5Client(ProxyClient):
     async def wrap(
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
     ) -> tuple[AsyncReader, AsyncWriter]:
-        await st_socks5_auth_req.write_async(writer, {"ver": 5, "meths": "\x00"})
+        await st_socks5_auth_req.pack_one_then_write_async(
+            writer, {"ver": 5, "meths": "\x00"}
+        )
         auth_resp = await st_socks5_auth_resp.read_async(reader)
         if auth_resp["ver"] != 5 or auth_resp["meth"] != 0:
             raise Exception("Invalid socks5 auth resp", auth_resp)
-        await st_socks5_req.write_async(
+        await st_socks5_req.pack_one_then_write_async(
             writer,
             {
                 "ver": 5,
@@ -155,7 +159,7 @@ class TrojanClient(ProxyClient):
     async def wrap(
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
     ) -> tuple[AsyncReader, AsyncWriter]:
-        await st_trojan_req.write_async(
+        await st_trojan_req.pack_one_then_write_async(
             writer,
             {
                 "auth": self.auth,
@@ -172,6 +176,7 @@ class Socks5ServerConfig(ProxyServerConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> Socks5Server:
+        _ = data
         return Socks5Server()
 
 
@@ -180,6 +185,7 @@ class Socks5ClientConfig(ProxyClientConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> Socks5Client:
+        _ = data
         return Socks5Client()
 
 

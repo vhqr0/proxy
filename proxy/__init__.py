@@ -210,38 +210,42 @@ class Struct(ABC):
     async def write_async(self, writer: AsyncWriter, data: Any):
         pass
 
+    def unpack_one(self, b: bytes) -> Any:
+        bio = io.BytesIO(b)
+        bio_reader = IOReader(bio)
+        data = self.read(bio_reader)
+        if bio.tell() != len(b):
+            raise Exception("BIO not at EOF")
+        return data
 
-def unpack_one_struct(struct: Struct, b: bytes) -> Any:
-    bio = io.BytesIO(b)
-    bio_reader = IOReader(bio)
-    data = struct.read(bio_reader)
-    if bio.tell() != len(b):
-        raise Exception("BIO not at EOF")
-    return data
+    def unpack_many(self, b: bytes) -> Iterable[Any]:
+        bio = io.BytesIO(b)
+        bio_reader = IOReader(bio)
+        data = []
+        while bio.tell() != len(b):
+            data.append(self.read(bio_reader))
+        return data
 
+    def pack_one(self, data: Any) -> bytes:
+        bio = io.BytesIO()
+        bio_writer = IOWriter(bio)
+        self.write(bio_writer, data)
+        return bio.getvalue()
 
-def unpack_many_structs(struct: Struct, b: bytes) -> Iterable[Any]:
-    bio = io.BytesIO(b)
-    bio_reader = IOReader(bio)
-    data = []
-    while bio.tell() != len(b):
-        data.append(struct.read(bio_reader))
-    return data
+    def pack_many(self, data: Iterable[Any]) -> bytes:
+        bio = io.BytesIO()
+        bio_writer = IOWriter(bio)
+        for _data in data:
+            self.write(bio_writer, _data)
+        return bio.getvalue()
 
+    async def pack_one_then_write_async(self, writer: AsyncWriter, data: Any):
+        await writer.write_async(self.pack_one(data))
 
-def pack_one_struct(struct: Struct, data: Any) -> bytes:
-    bio = io.BytesIO()
-    bio_writer = IOWriter(bio)
-    struct.write(bio_writer, data)
-    return bio.getvalue()
-
-
-def pack_many_structs(struct: Struct, data: Iterable[Any]) -> bytes:
-    bio = io.BytesIO()
-    bio_writer = IOWriter(bio)
-    for _data in data:
-        struct.write(bio_writer, _data)
-    return bio.getvalue()
+    async def pack_many_then_write_async(
+        self, writer: AsyncWriter, data: Iterable[Any]
+    ):
+        await writer.write_async(self.pack_many(data))
 
 
 class WrapStruct(Struct):
@@ -570,7 +574,7 @@ class BlockOutBound(OutBound):
         port: int,
         callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
     ):
-        pass
+        _ = host, port, callback
 
 
 class DirectOutBound(OutBound):
@@ -692,17 +696,27 @@ class ServerProviderConfig(RegistrableConfig):
         pass
 
 
-class AIOServerProviderConfig(ServerProvider):
-    @classmethod
-    def from_data(cls, data: dict) -> AIOServerProvider:
-        return AIOServerProvider(*data.get("args", []), **data.get("kwargs", {}))
-
-
 class ClientProviderConfig(RegistrableConfig):
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> ClientProvider:
         pass
+
+
+class AIOServerProviderConfig(ServerProviderConfig):
+    type = "aio"
+
+    @classmethod
+    def from_data(cls, data: dict) -> AIOServerProvider:
+        return AIOServerProvider(**data)
+
+
+class AIOClientProviderConfig(ClientProviderConfig):
+    type = "aio"
+
+    @classmethod
+    def from_data(cls, data: dict) -> AIOClientProvider:
+        return AIOClientProvider(**data)
 
 
 class InBoundConfig(RegistrableConfig):
@@ -719,9 +733,65 @@ class OutBoundConfig(RegistrableConfig):
         pass
 
 
+class ProxyInBoundConfig(InBoundConfig):
+    type = "proxy"
+
+    @classmethod
+    def from_data(cls, data: dict) -> ProxyInBound:
+        server_provider: ServerProvider = ServerProviderConfig.from_data_by_type(
+            data["server_provider"]
+        )
+        proxy_server: ProxyServer = ProxyServerConfig.from_data_by_type(
+            data["proxy_server"]
+        )
+        return ProxyInBound(server_provider=server_provider, proxy_server=proxy_server)
+
+
+class IngressInBoundConfig(InBoundConfig):
+    type = "ingress"
+
+    @classmethod
+    def from_data(cls, data: dict) -> IngressInBound:
+        inbounds: Iterable[InBound] = map(
+            InBoundConfig.from_data_by_type,
+            data["inbounds"],
+        )
+        return IngressInBound(inbounds)
+
+
+class BlockOutBoundConfig(OutBoundConfig):
+    type = "block"
+
+    @classmethod
+    def from_data(cls, data: dict) -> BlockOutBound:
+        _ = data
+        return BlockOutBound()
+
+
+class DirectOutBoundConfig(OutBoundConfig):
+    type = "direct"
+
+    @classmethod
+    def from_data(cls, data: dict) -> DirectOutBound:
+        _ = data
+        return DirectOutBound()
+
+
+class RandDispatchOutBoundConfig(OutBoundConfig):
+    type = "rand-dispatch"
+
+    @classmethod
+    def from_data(cls, data: dict) -> RandDispatchOutBound:
+        outbounds: Iterable[OutBound] = map(
+            OutBoundConfig.from_data_by_type,
+            data["outbounds"],
+        )
+        return RandDispatchOutBound(outbounds)
+
+
 class ServerConfig(Config):
     @classmethod
     def from_data(cls, data: dict) -> Server:
         inbound = InBoundConfig.from_data_by_type(data["inbound"])
         outbound = OutBoundConfig.from_data_by_type(data["inbound"])
-        return Server(inbound, outbound)
+        return Server(inbound=inbound, outbound=outbound)
