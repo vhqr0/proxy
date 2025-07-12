@@ -1,0 +1,11 @@
+{
+  "plugins": ["proxy.plugins.socks5"],
+  "server": {
+    "inbound": {
+      "type": "proxy",
+      "server_provider": { "type": "aio", "kwargs": { "port": 1080 } },
+      "proxy_server": { "type": "socks5" }
+    },
+    "outbound": { "type": "direct" }
+  }
+}

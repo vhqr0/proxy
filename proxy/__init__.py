@@ -663,10 +663,10 @@ class Config(ABC):
 
 
 class RegistrableConfig(Config):
-    registry = dict()
+    registry: dict
 
     def __init_subclass__(cls):
-        if hasattr(cls, "type"):
+        if hasattr(cls, "registry") and hasattr(cls, "type"):
             cls.registry[getattr(cls, "type")] = cls
         return super().__init_subclass__()
 
@@ -676,6 +676,8 @@ class RegistrableConfig(Config):
 
 
 class ProxyServerConfig(RegistrableConfig):
+    registry = dict()
+
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> ProxyServer:
@@ -683,6 +685,8 @@ class ProxyServerConfig(RegistrableConfig):
 
 
 class ProxyClientConfig(RegistrableConfig):
+    registry = dict()
+
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> ProxyClient:
@@ -690,6 +694,8 @@ class ProxyClientConfig(RegistrableConfig):
 
 
 class ServerProviderConfig(RegistrableConfig):
+    registry = dict()
+
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> ServerProvider:
@@ -697,6 +703,8 @@ class ServerProviderConfig(RegistrableConfig):
 
 
 class ClientProviderConfig(RegistrableConfig):
+    registry = dict()
+
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> ClientProvider:
@@ -708,7 +716,7 @@ class AIOServerProviderConfig(ServerProviderConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> AIOServerProvider:
-        return AIOServerProvider(**data)
+        return AIOServerProvider(**data["kwargs"])
 
 
 class AIOClientProviderConfig(ClientProviderConfig):
@@ -716,10 +724,12 @@ class AIOClientProviderConfig(ClientProviderConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> AIOClientProvider:
-        return AIOClientProvider(**data)
+        return AIOClientProvider(**data["kwargs"])
 
 
 class InBoundConfig(RegistrableConfig):
+    registry = dict()
+
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> InBound:
@@ -727,6 +737,8 @@ class InBoundConfig(RegistrableConfig):
 
 
 class OutBoundConfig(RegistrableConfig):
+    registry = dict()
+
     @classmethod
     @abstractmethod
     def from_data(cls, data: dict) -> OutBound:
@@ -777,8 +789,22 @@ class DirectOutBoundConfig(OutBoundConfig):
         return DirectOutBound()
 
 
+class ProxyOutBoundConfig(OutBoundConfig):
+    type = "proxy"
+
+    @classmethod
+    def from_data(cls, data: dict) -> ProxyOutBound:
+        client_provider: ClientProvider = ClientProviderConfig.from_data_by_type(
+            data["client_provider"]
+        )
+        proxy_client: ProxyClient = ProxyClientConfig.from_data_by_type(
+            data["proxy_client"]
+        )
+        return ProxyOutBound(client_provider=client_provider, proxy_client=proxy_client)
+
+
 class RandDispatchOutBoundConfig(OutBoundConfig):
-    type = "rand-dispatch"
+    type = "rand_dispatch"
 
     @classmethod
     def from_data(cls, data: dict) -> RandDispatchOutBound:
@@ -793,5 +819,5 @@ class ServerConfig(Config):
     @classmethod
     def from_data(cls, data: dict) -> Server:
         inbound = InBoundConfig.from_data_by_type(data["inbound"])
-        outbound = OutBoundConfig.from_data_by_type(data["inbound"])
+        outbound = OutBoundConfig.from_data_by_type(data["outbound"])
         return Server(inbound=inbound, outbound=outbound)
