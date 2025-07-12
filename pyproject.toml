@@ -9,13 +9,9 @@ dependencies = []
 ws = [
     "websockets>=15.0.1",
 ]
-vmessc = [
+vmess = [
     "cryptography>=45.0.5",
-]
-
-[dependency-groups]
-dev = [
-    "ipython>=9.4.0",
+    "pycryptodome>=3.23.0",
 ]
 
 [tool.pyright]
