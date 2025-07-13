@@ -702,9 +702,14 @@ class RegistrableConfig(Config):
             cls.registry[getattr(cls, "type")] = cls
         return super().__init_subclass__()
 
+    @staticmethod
+    def unpack_type(type, **data):
+        return type, data
+
     @classmethod
     def from_data_by_type(cls, data: dict) -> Any:
-        return cls.registry[data["type"]].from_data(data)
+        type, data = cls.unpack_type(**data)
+        return cls.registry[type].from_data(data)
 
 
 class ProxyServerConfig(RegistrableConfig):
@@ -748,7 +753,7 @@ class TCPServerProviderConfig(ServerProviderConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> TCPServerProvider:
-        return TCPServerProvider(**data["kwargs"])
+        return TCPServerProvider(**data)
 
 
 class TCPClientProviderConfig(ClientProviderConfig):
@@ -756,7 +761,7 @@ class TCPClientProviderConfig(ClientProviderConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> TCPClientProvider:
-        return TCPClientProvider(**data["kwargs"])
+        return TCPClientProvider(**data)
 
 
 class InBoundConfig(RegistrableConfig):
