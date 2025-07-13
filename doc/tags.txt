@@ -1,0 +1,2 @@
+proxy google.com
+block ads.google.com

@@ -64,6 +64,6 @@ class TagDispatchOutBoundConfig(OutBoundConfig):
             default_tag=data["default_tag"],
             outbounds={
                 tag: OutBoundConfig.from_data_by_type(outbound)
-                for tag, outbound in data["outbounds"]
+                for tag, outbound in data["outbounds"].items()
             },
         )

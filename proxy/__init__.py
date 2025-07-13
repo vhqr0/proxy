@@ -500,7 +500,11 @@ class AIOServerProvider(ServerProvider):
         self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
     ):
         async def aio_callback(reader: aio.StreamReader, writer: aio.StreamWriter):
-            await callback(AIOReader(reader), AIOWriter(writer))
+            try:
+                await callback(AIOReader(reader), AIOWriter(writer))
+            finally:
+                writer.close()
+                await writer.wait_closed()
 
         server = await aio.start_server(aio_callback, **self.kwargs)
         async with server:

@@ -1,0 +1,41 @@
+{
+  "plugins": [
+    "proxy.plugins.socks5",
+    "proxy.plugins.vmess",
+    "proxy.plugins.tag"
+  ],
+  "logger": {
+    "version": 1,
+    "handlers": {
+      "console": { "class": "logging.StreamHandler", "level": "DEBUG" }
+    },
+    "loggers": { "proxy": { "level": "DEBUG", "handlers": ["console"] } }
+  },
+  "server": {
+    "inbound": {
+      "type": "proxy",
+      "server_provider": { "type": "aio", "kwargs": { "port": 1080 } },
+      "proxy_server": { "type": "socks5" }
+    },
+    "outbound": {
+      "type": "tag_dispatch",
+      "tags_path": "doc/tags.txt",
+      "default_tag": "direct",
+      "outbounds": {
+        "block": { "type": "block" },
+        "direct": { "type": "direct" },
+        "proxy": {
+          "type": "proxy",
+          "client_provider": {
+            "type": "aio",
+            "kwargs": { "host": "localhost", "port": 10086 }
+          },
+          "proxy_client": {
+            "type": "vmess",
+            "id": "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+          }
+        }
+      }
+    }
+  }
+}
