@@ -567,7 +567,7 @@ class ProxyInBound(InBound):
         await self.server_provider.start_server(server_provider_callback)
 
 
-class IngressInBound(InBound):
+class MultiInBound(InBound):
     def __init__(self, inbounds: Iterable[InBound]):
         self.inbounds = inbounds
 
@@ -791,16 +791,16 @@ class ProxyInBoundConfig(InBoundConfig):
         return ProxyInBound(server_provider=server_provider, proxy_server=proxy_server)
 
 
-class IngressInBoundConfig(InBoundConfig):
-    type = "ingress"
+class MultiInBoundConfig(InBoundConfig):
+    type = "multi"
 
     @classmethod
-    def from_data(cls, data: dict) -> IngressInBound:
+    def from_data(cls, data: dict) -> MultiInBound:
         inbounds: Iterable[InBound] = map(
             InBoundConfig.from_data_by_type,
             data["inbounds"],
         )
-        return IngressInBound(inbounds)
+        return MultiInBound(inbounds)
 
 
 class BlockOutBoundConfig(OutBoundConfig):
