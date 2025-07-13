@@ -744,7 +744,7 @@ class ClientProviderConfig(RegistrableConfig):
 
 
 class AIOServerProviderConfig(ServerProviderConfig):
-    type = "aio"
+    type = "tcp"
 
     @classmethod
     def from_data(cls, data: dict) -> AIOServerProvider:
@@ -752,7 +752,7 @@ class AIOServerProviderConfig(ServerProviderConfig):
 
 
 class AIOClientProviderConfig(ClientProviderConfig):
-    type = "aio"
+    type = "tcp"
 
     @classmethod
     def from_data(cls, data: dict) -> AIOClientProvider:

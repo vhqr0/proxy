@@ -10,13 +10,13 @@
   "server": {
     "inbound": {
       "type": "proxy",
-      "server_provider": { "type": "aio", "kwargs": { "port": 1080 } },
+      "server_provider": { "type": "tcp", "kwargs": { "port": 1080 } },
       "proxy_server": { "type": "socks5" }
     },
     "outbound": {
       "type": "proxy",
       "client_provider": {
-        "type": "aio",
+        "type": "tcp",
         "kwargs": { "host": "localhost", "port": 10086 }
       },
       "proxy_client": {
