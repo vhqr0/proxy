@@ -492,26 +492,26 @@ class ClientProvider(ABC):
         pass
 
 
-class AIOServerProvider(ServerProvider):
+class TCPServerProvider(ServerProvider):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
     async def start_server(
         self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
     ):
-        async def aio_callback(reader: aio.StreamReader, writer: aio.StreamWriter):
+        async def tcp_callback(reader: aio.StreamReader, writer: aio.StreamWriter):
             try:
                 await callback(AIOReader(reader), AIOWriter(writer))
             finally:
                 writer.close()
                 await writer.wait_closed()
 
-        server = await aio.start_server(aio_callback, **self.kwargs)
+        server = await aio.start_server(tcp_callback, **self.kwargs)
         async with server:
             await server.serve_forever()
 
 
-class AIOClientProvider(ClientProvider):
+class TCPClientProvider(ClientProvider):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
@@ -743,20 +743,20 @@ class ClientProviderConfig(RegistrableConfig):
         pass
 
 
-class AIOServerProviderConfig(ServerProviderConfig):
+class TCPServerProviderConfig(ServerProviderConfig):
     type = "tcp"
 
     @classmethod
-    def from_data(cls, data: dict) -> AIOServerProvider:
-        return AIOServerProvider(**data["kwargs"])
+    def from_data(cls, data: dict) -> TCPServerProvider:
+        return TCPServerProvider(**data["kwargs"])
 
 
-class AIOClientProviderConfig(ClientProviderConfig):
+class TCPClientProviderConfig(ClientProviderConfig):
     type = "tcp"
 
     @classmethod
-    def from_data(cls, data: dict) -> AIOClientProvider:
-        return AIOClientProvider(**data["kwargs"])
+    def from_data(cls, data: dict) -> TCPClientProvider:
+        return TCPClientProvider(**data["kwargs"])
 
 
 class InBoundConfig(RegistrableConfig):
