@@ -19,7 +19,7 @@
     },
     "outbound": {
       "type": "tag_dispatch",
-      "tags": { "type": "text", "path": "doc/tags.txt" },
+      "tags": { "type": "text", "path": "doc/google_tags.txt" },
       "default_tag": "direct",
       "outbounds": {
         "block": { "type": "block" },
