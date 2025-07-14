@@ -36,26 +36,6 @@ class TagDispatchOutBound(OutBound):
         await outbound.open_connection(host, port, callback)
 
 
-def load_text_tags(path: str) -> dict[str, str]:
-    """Load tags file.
-    The format of tags file looks like:
-    ---
-    proxy goggle.com
-    block ads.google.com
-    ...
-    ---
-    Each line contains a tag and a host name.
-    Blank lines or lines that start with '#' are skipped."""
-    tags: dict[str, str] = dict()
-    with open(path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if len(line) > 0 and not line.startswith("#"):
-                tag, host = line.split()
-                tags[host] = tag
-    return tags
-
-
 class TagsProviderConfig(RegistrableConfig):
     registry = dict()
 
@@ -63,6 +43,18 @@ class TagsProviderConfig(RegistrableConfig):
     @abstractmethod
     def from_data(cls, data: dict) -> dict[str, str]:
         pass
+
+
+class MultiTagsProviderConfig(TagsProviderConfig):
+    type = "multi"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        tags: dict[str, str] = dict()
+        for provider in data["providers"]:
+            for host, tag in TagsProviderConfig.from_data_by_type(provider):
+                tags[host] = tag
+        return tags
 
 
 class DataTagsProviderConfig(TagsProviderConfig):
@@ -87,7 +79,15 @@ class TextTagsProviderConfig(TagsProviderConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> dict[str, str]:
-        return load_text_tags(data["path"])
+        tags: dict[str, str] = dict()
+        with open(data["path"], "r") as f:
+            for line in f:
+                # remove comment regions that start with "#", then strip
+                line = line.split("#", 1)[0].strip()
+                if len(line) > 0:
+                    tag, host = line.split()
+                    tags[host] = tag
+        return tags
 
 
 class TagDispatchOutBoundConfig(OutBoundConfig):
