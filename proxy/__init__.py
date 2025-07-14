@@ -169,7 +169,8 @@ class IOWriter(Writer):
         self.file = file
 
     def write(self, data: bytes):
-        self.file.write(data)
+        if len(data) > 0:
+            self.file.write(data)
 
 
 class AIOReader(AsyncReader):
@@ -191,8 +192,9 @@ class AIOWriter(AsyncWriter):
         self.writer = writer
 
     async def write_async(self, data: bytes):
-        self.writer.write(data)
-        await self.writer.drain()
+        if len(data) > 0:
+            self.writer.write(data)
+            await self.writer.drain()
 
 
 def pipe(reader: Reader, writer: Writer):

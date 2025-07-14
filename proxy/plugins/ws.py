@@ -23,10 +23,12 @@ class WSReader(BufferedAsyncReader):
 
     async def read1_async(self) -> bytes:
         try:
-            msg = await self.ws.recv()
-            if isinstance(msg, str):
-                msg = msg.encode()
-            return msg
+            while True:
+                msg = await self.ws.recv()
+                if isinstance(msg, str):
+                    msg = msg.encode()
+                if len(msg) > 0:
+                    return msg
         except websockets.exceptions.ConnectionClosedOK:
             return b""
 
@@ -36,7 +38,8 @@ class WSWriter(AsyncWriter):
         self.ws = ws
 
     async def write_async(self, data: bytes):
-        await self.ws.send(data)
+        if len(data) > 0:
+            await self.ws.send(data)
 
 
 class WSServerProvider(ServerProvider):

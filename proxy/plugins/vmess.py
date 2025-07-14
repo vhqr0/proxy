@@ -262,14 +262,15 @@ class VMessWriter(AsyncWriter):
         return req + pad
 
     async def write_async(self, data: bytes):
-        if self.wait_req:
-            self.wait_req = False
-            req = self.gen_req()
-            ereq = self.id.encrypt_req(req)
-            edata = self.cryptor.encrypt_with_len(data)
-            await self.writer.write_async(ereq + edata)
-        else:
-            await self.writer.write_async(self.cryptor.encrypt_with_len(data))
+        if len(data) > 0:
+            if self.wait_req:
+                self.wait_req = False
+                req = self.gen_req()
+                ereq = self.id.encrypt_req(req)
+                edata = self.cryptor.encrypt_with_len(data)
+                await self.writer.write_async(ereq + edata)
+            else:
+                await self.writer.write_async(self.cryptor.encrypt_with_len(data))
 
 
 class VMessClient(ProxyClient):
