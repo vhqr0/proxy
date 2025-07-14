@@ -3,6 +3,7 @@ from collections.abc import Callable, Awaitable, Iterable
 from abc import ABC, abstractmethod
 import struct as format_struct
 import random
+import json
 import logging
 import io
 import asyncio as aio
@@ -850,6 +851,24 @@ class RandDispatchOutBoundConfig(OutBoundConfig):
             data["outbounds"],
         )
         return RandDispatchOutBound(outbounds)
+
+
+class JsonInBoundConfig(InBoundConfig):
+    type = "json"
+
+    @classmethod
+    def from_data(cls, data: dict) -> InBound:
+        with open(data["path"], "r") as f:
+            return InBoundConfig.from_data_by_type(json.load(f))
+
+
+class JsonOutBoundConfig(OutBoundConfig):
+    type = "json"
+
+    @classmethod
+    def from_data(cls, data: dict) -> OutBound:
+        with open(data["path"], "r") as f:
+            return OutBoundConfig.from_data_by_type(json.load(f))
 
 
 class ServerConfig(Config):
