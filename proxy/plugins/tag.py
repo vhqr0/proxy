@@ -1,6 +1,8 @@
 from typing import Optional
 from collections.abc import Callable, Awaitable
-from proxy import AsyncReader, AsyncWriter, OutBound, OutBoundConfig
+from abc import abstractmethod
+import json
+from proxy import AsyncReader, AsyncWriter, OutBound, RegistrableConfig, OutBoundConfig
 
 
 def match_tags(host: str, tags: dict[str, str]) -> Optional[str]:
@@ -34,7 +36,7 @@ class TagDispatchOutBound(OutBound):
         await outbound.open_connection(host, port, callback)
 
 
-def load_tags(tags_path: str) -> dict[str, str]:
+def load_text_tags(path: str) -> dict[str, str]:
     """Load tags file.
     The format of tags file looks like:
     ---
@@ -45,7 +47,7 @@ def load_tags(tags_path: str) -> dict[str, str]:
     Each line contains a tag and a host name.
     Blank lines or lines that start with '#' are skipped."""
     tags: dict[str, str] = dict()
-    with open(tags_path, "r") as f:
+    with open(path, "r") as f:
         for line in f:
             line = line.strip()
             if len(line) > 0 and not line.startswith("#"):
@@ -54,13 +56,47 @@ def load_tags(tags_path: str) -> dict[str, str]:
     return tags
 
 
+class TagsProviderConfig(RegistrableConfig):
+    registry = dict()
+
+    @classmethod
+    @abstractmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        pass
+
+
+class DataTagsProviderConfig(TagsProviderConfig):
+    type = "data"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        return data["tags"]
+
+
+class JsonTagsProviderConfig(TagsProviderConfig):
+    type = "json"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        with open(data["path"], "r") as f:
+            return json.load(f)
+
+
+class TextTagsProviderConfig(TagsProviderConfig):
+    type = "text"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        return load_text_tags(data["path"])
+
+
 class TagDispatchOutBoundConfig(OutBoundConfig):
     type = "tag_dispatch"
 
     @classmethod
     def from_data(cls, data: dict) -> TagDispatchOutBound:
         return TagDispatchOutBound(
-            tags=load_tags(data["tags_path"]),
+            tags=TagsProviderConfig.from_data_by_type(data["tags"]),
             default_tag=data["default_tag"],
             outbounds={
                 tag: OutBoundConfig.from_data_by_type(outbound)

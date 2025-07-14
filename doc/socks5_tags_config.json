@@ -19,7 +19,7 @@
     },
     "outbound": {
       "type": "tag_dispatch",
-      "tags_path": "doc/tags.txt",
+      "tags": { "type": "text", "path": "doc/tags.txt" },
       "default_tag": "direct",
       "outbounds": {
         "block": { "type": "block" },
