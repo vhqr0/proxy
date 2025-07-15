@@ -19,7 +19,10 @@
     },
     "outbound": {
       "type": "tag_dispatch",
-      "tags": { "type": "text", "path": "doc/google_tags.txt" },
+      "tags": {
+        "type": "data",
+        "tags": { "google.com": "proxy", "ads.google.com": "block" }
+      },
       "default_tag": "direct",
       "outbounds": {
         "block": { "type": "block" },

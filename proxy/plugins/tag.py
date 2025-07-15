@@ -74,22 +74,6 @@ class JsonTagsProviderConfig(TagsProviderConfig):
             return json.load(f)
 
 
-class TextTagsProviderConfig(TagsProviderConfig):
-    type = "text"
-
-    @classmethod
-    def from_data(cls, data: dict) -> dict[str, str]:
-        tags: dict[str, str] = dict()
-        with open(data["path"], "r") as f:
-            for line in f:
-                # remove comment regions that start with "#", then strip
-                line = line.split("#", 1)[0].strip()
-                if len(line) > 0:
-                    tag, host = line.split()
-                    tags[host] = tag
-        return tags
-
-
 class TagDispatchOutBoundConfig(OutBoundConfig):
     type = "tag_dispatch"
 
