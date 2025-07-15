@@ -1,9 +1,5 @@
 {
-  "plugins": [
-    "proxy.plugins.socks5",
-    "proxy.plugins.vmess",
-    "proxy.plugins.tag"
-  ],
+  "plugins": ["proxy.plugins.socks5", "proxy.plugins.vmess"],
   "logger": {
     "version": 1,
     "handlers": {

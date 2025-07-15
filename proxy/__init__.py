@@ -650,6 +650,37 @@ class RandDispatchOutBound(OutBound):
         await outbound.open_connection(host, port, callback)
 
 
+def match_tags(host: str, tags: dict[str, str]) -> Optional[str]:
+    tag = tags.get(host)
+    if tag is not None:
+        return tag
+    sp = host.split(".", 1)
+    if len(sp) == 2:
+        return match_tags(sp[1], tags)
+
+
+class TagDispatchOutBound(OutBound):
+    def __init__(
+        self,
+        tags: dict[str, str],  # host -> tag
+        default_tag: str,
+        outbounds: dict[str, OutBound],  # tag -> outbound
+    ):
+        self.tags = tags
+        self.default_tag = default_tag
+        self.outbounds = outbounds
+
+    async def open_connection(
+        self,
+        host: str,
+        port: int,
+        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
+    ):
+        tag = match_tags(host, self.tags) or self.default_tag
+        outbound = self.outbounds[tag]
+        await outbound.open_connection(host, port, callback)
+
+
 class Server:
     def __init__(
         self,
@@ -855,6 +886,50 @@ class RandDispatchOutBoundConfig(OutBoundConfig):
         return RandDispatchOutBound(outbounds)
 
 
+class TagsProviderConfig(RegistrableConfig):
+    registry = dict()
+
+    @classmethod
+    @abstractmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        pass
+
+
+class MultiTagsProviderConfig(TagsProviderConfig):
+    type = "multi"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        tags: dict[str, str] = dict()
+        for provider in data["providers"]:
+            for host, tag in TagsProviderConfig.from_data_by_type(provider):
+                tags[host] = tag
+        return tags
+
+
+class DataTagsProviderConfig(TagsProviderConfig):
+    type = "data"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        return data["tags"]
+
+
+class TagDispatchOutBoundConfig(OutBoundConfig):
+    type = "tag_dispatch"
+
+    @classmethod
+    def from_data(cls, data: dict) -> TagDispatchOutBound:
+        return TagDispatchOutBound(
+            tags=TagsProviderConfig.from_data_by_type(data["tags"]),
+            default_tag=data["default_tag"],
+            outbounds={
+                tag: OutBoundConfig.from_data_by_type(outbound)
+                for tag, outbound in data["outbounds"].items()
+            },
+        )
+
+
 class JsonInBoundConfig(InBoundConfig):
     type = "json"
 
@@ -871,6 +946,15 @@ class JsonOutBoundConfig(OutBoundConfig):
     def from_data(cls, data: dict) -> OutBound:
         with open(data["path"], "r") as f:
             return OutBoundConfig.from_data_by_type(json.load(f))
+
+
+class JsonTagsProviderConfig(TagsProviderConfig):
+    type = "json"
+
+    @classmethod
+    def from_data(cls, data: dict) -> dict[str, str]:
+        with open(data["path"], "r") as f:
+            return json.load(f)
 
 
 class ServerConfig(Config):
