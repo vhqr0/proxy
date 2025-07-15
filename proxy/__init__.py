@@ -670,14 +670,16 @@ class TagDispatchOutBound(OutBound):
         self.default_tag = default_tag
         self.outbounds = outbounds
 
+    def match_tags(self, host: str) -> str:
+        return match_tags(host, self.tags) or self.default_tag
+
     async def open_connection(
         self,
         host: str,
         port: int,
         callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
     ):
-        tag = match_tags(host, self.tags) or self.default_tag
-        outbound = self.outbounds[tag]
+        outbound = self.outbounds[self.match_tags(host)]
         await outbound.open_connection(host, port, callback)
 
 
@@ -736,13 +738,12 @@ class RegistrableConfig(Config):
             cls.registry[getattr(cls, "type")] = cls
         return super().__init_subclass__()
 
-    @staticmethod
-    def unpack_type(type, **data):
-        return type, data
-
     @classmethod
     def from_data_by_type(cls, data: dict) -> Any:
-        type, data = cls.unpack_type(**data)
+        def unpack_type(type, **data):
+            return type, data
+
+        type, data = unpack_type(**data)
         return cls.registry[type].from_data(data)
 
 
