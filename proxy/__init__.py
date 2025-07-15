@@ -931,36 +931,30 @@ class TagDispatchOutBoundConfig(OutBoundConfig):
         )
 
 
-class JsonInBoundConfig(InBoundConfig):
-    type = "json"
-
-    @classmethod
-    def from_data(cls, data: dict) -> InBound:
-        with open(data["path"], "r") as f:
-            return InBoundConfig.from_data_by_type(json.load(f))
-
-
-class JsonOutBoundConfig(OutBoundConfig):
-    type = "json"
-
-    @classmethod
-    def from_data(cls, data: dict) -> OutBound:
-        with open(data["path"], "r") as f:
-            return OutBoundConfig.from_data_by_type(json.load(f))
-
-
-class JsonTagsProviderConfig(TagsProviderConfig):
-    type = "json"
-
-    @classmethod
-    def from_data(cls, data: dict) -> dict[str, str]:
-        with open(data["path"], "r") as f:
-            return json.load(f)
-
-
 class ServerConfig(Config):
     @classmethod
     def from_data(cls, data: dict) -> Server:
         inbound = InBoundConfig.from_data_by_type(data["inbound"])
         outbound = OutBoundConfig.from_data_by_type(data["outbound"])
         return Server(inbound=inbound, outbound=outbound)
+
+
+class JsonConfig(RegistrableConfig):
+    type = "json"
+
+    @classmethod
+    def from_data(cls, data: dict) -> Any:
+        with open(data["path"], "r") as f:
+            return cls.from_data_by_type(json.load(f))
+
+
+class JsonInBoundConfig(JsonConfig, InBoundConfig):
+    pass
+
+
+class JsonOutBoundConfig(JsonConfig, OutBoundConfig):
+    pass
+
+
+class JsonTagsProviderConfig(JsonConfig, TagsProviderConfig):
+    pass
