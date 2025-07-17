@@ -6,9 +6,10 @@ import websockets.asyncio.server as ws_server
 import websockets.asyncio.client as ws_client
 
 from proxy import (
-    AsyncReader,
     BufferedAsyncReader,
     AsyncWriter,
+    ClientCallback,
+    ServerCallback,
     ServerProvider,
     ClientProvider,
     ServerProviderConfig,
@@ -46,9 +47,7 @@ class WSServerProvider(ServerProvider):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-    async def start_server(
-        self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
-    ):
+    async def start_server(self, callback: ServerCallback):
         async def ws_callback(ws: ws_conn.Connection):
             await callback(WSReader(ws), WSWriter(ws))
 
@@ -60,9 +59,7 @@ class WSClientProvider(ClientProvider):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-    async def open_connection(
-        self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
-    ):
+    async def open_connection(self, callback: ClientCallback):
         async with ws_client.connect(**self.kwargs) as ws:
             await callback(WSReader(ws), WSWriter(ws))
 

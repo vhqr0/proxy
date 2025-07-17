@@ -289,53 +289,57 @@ class WrapStruct(Struct):
         await self.struct.write_async(writer, self.pack_fn(data))
 
 
+type TupleContext = Iterable[Any]
+
+
 class TupleStruct(Struct):
     def __init__(self, structs: Iterable[Struct]):
         self.structs = structs
 
-    def read(self, reader: Reader) -> Iterable[Any]:
-        data = []
+    def read(self, reader: Reader) -> TupleContext:
+        data: TupleContext = []
         for struct in self.structs:
             data.append(struct.read(reader))
         return data
 
-    async def read_async(self, reader: AsyncReader) -> Iterable[Any]:
-        data = []
+    async def read_async(self, reader: AsyncReader) -> TupleContext:
+        data: TupleContext = []
         for struct in self.structs:
             data.append(await struct.read_async(reader))
         return data
 
 
+type DictContext = dict[str, Any]
+type DictContextStruct = Struct | Callable[[DictContext], Struct]
+
+
 class DictStruct(Struct):
-    def __init__(
-        self,
-        key_structs: Iterable[tuple[str, Struct | Callable[[dict[str, Any]], Struct]]],
-    ):
+    def __init__(self, key_structs: Iterable[tuple[str, DictContextStruct]]):
         self.key_structs = key_structs
 
-    def read(self, reader: Reader) -> dict[str, Any]:
-        data = dict()
+    def read(self, reader: Reader) -> DictContext:
+        data: DictContext = dict()
         for key, struct in self.key_structs:
             if not isinstance(struct, Struct):
                 struct = struct(data)
             data[key] = struct.read(reader)
         return data
 
-    async def read_async(self, reader: AsyncReader) -> dict[str, Any]:
-        data = dict()
+    async def read_async(self, reader: AsyncReader) -> DictContext:
+        data: DictContext = dict()
         for key, struct in self.key_structs:
             if not isinstance(struct, Struct):
                 struct = struct(data)
             data[key] = await struct.read_async(reader)
         return data
 
-    def write(self, writer: Writer, data: dict[str, Any]):
+    def write(self, writer: Writer, data: DictContext):
         for key, struct in self.key_structs:
             if not isinstance(struct, Struct):
                 struct = struct(data)
             struct.write(writer, data[key])
 
-    async def write_async(self, writer: AsyncWriter, data: dict[str, Any]):
+    async def write_async(self, writer: AsyncWriter, data: DictContext):
         for key, struct in self.key_structs:
             if not isinstance(struct, Struct):
                 struct = struct(data)
@@ -478,20 +482,22 @@ st_uint16_le = IntStruct("<H")
 st_uint32_le = IntStruct("<L")
 st_uint64_le = IntStruct("<Q")
 
+type Stream = tuple[AsyncReader, AsyncWriter]
+type StreamCallback = Callable[[AsyncReader, AsyncWriter], Awaitable]
+
+type ServerCallback = StreamCallback
+type ClientCallback = StreamCallback
+
 
 class ServerProvider(ABC):
     @abstractmethod
-    async def start_server(
-        self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
-    ):
+    async def start_server(self, callback: ServerCallback):
         pass
 
 
 class ClientProvider(ABC):
     @abstractmethod
-    async def open_connection(
-        self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
-    ):
+    async def open_connection(self, callback: ClientCallback):
         pass
 
 
@@ -499,9 +505,7 @@ class TCPServerProvider(ServerProvider):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-    async def start_server(
-        self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
-    ):
+    async def start_server(self, callback: ServerCallback):
         async def tcp_callback(reader: aio.StreamReader, writer: aio.StreamWriter):
             try:
                 await callback(AIOReader(reader), AIOWriter(writer))
@@ -518,9 +522,7 @@ class TCPClientProvider(ClientProvider):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-    async def open_connection(
-        self, callback: Callable[[AsyncReader, AsyncWriter], Awaitable]
-    ):
+    async def open_connection(self, callback: ClientCallback):
         reader, writer = await aio.open_connection(**self.kwargs)
         try:
             await callback(AIOReader(reader), AIOWriter(writer))
@@ -529,11 +531,15 @@ class TCPClientProvider(ClientProvider):
             await writer.wait_closed()
 
 
+type ProxyClientStream = tuple[AsyncReader, AsyncWriter, str, int]
+type ProxyClientStreamCallback = Callable[
+    [AsyncReader, AsyncWriter, str, int], Awaitable
+]
+
+
 class ProxyServer(ABC):
     @abstractmethod
-    async def wrap(
-        self, reader: AsyncReader, writer: AsyncWriter
-    ) -> tuple[AsyncReader, AsyncWriter, str, int]:
+    async def wrap(self, reader: AsyncReader, writer: AsyncWriter) -> ProxyClientStream:
         """Wrap reader/writer to a new pair of reader/writer, and request host/port."""
         pass
 
@@ -542,16 +548,24 @@ class ProxyClient(ABC):
     @abstractmethod
     async def wrap(
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
-    ) -> tuple[AsyncReader, AsyncWriter]:
+    ) -> Stream:
         """Wrap reader/writer to a new pair of reader/writer, connect to host/pair via target proxy server."""
         pass
 
 
+type InBoundCallback = ProxyClientStreamCallback
+type OutBoundCallback = StreamCallback
+
+
 class InBound(ABC):
     @abstractmethod
-    async def start_server(
-        self, callback: Callable[[AsyncReader, AsyncWriter, str, int], Awaitable]
-    ):
+    async def start_server(self, callback: InBoundCallback):
+        pass
+
+
+class OutBound(ABC):
+    @abstractmethod
+    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
         pass
 
 
@@ -560,9 +574,7 @@ class ProxyInBound(InBound):
         self.server_provider = server_provider
         self.proxy_server = proxy_server
 
-    async def start_server(
-        self, callback: Callable[[AsyncReader, AsyncWriter, str, int], Awaitable]
-    ):
+    async def start_server(self, callback: InBoundCallback):
         async def server_provider_callback(reader: AsyncReader, writer: AsyncWriter):
             reader, writer, host, port = await self.proxy_server.wrap(reader, writer)
             await callback(reader, writer, host, port)
@@ -570,46 +582,26 @@ class ProxyInBound(InBound):
         await self.server_provider.start_server(server_provider_callback)
 
 
-class MultiInBound(InBound):
-    def __init__(self, inbounds: Iterable[InBound]):
-        self.inbounds = inbounds
+class ProxyOutBound(OutBound):
+    def __init__(self, client_provider: ClientProvider, proxy_client: ProxyClient):
+        self.client_provider = client_provider
+        self.proxy_client = proxy_client
 
-    async def start_server(
-        self, callback: Callable[[AsyncReader, AsyncWriter, str, int], Awaitable]
-    ):
-        await aio.gather(
-            *map(lambda inbound: inbound.start_server(callback), self.inbounds)
-        )
+    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
+        async def client_provider_callback(reader: AsyncReader, writer: AsyncWriter):
+            reader, writer = await self.proxy_client.wrap(reader, writer, host, port)
+            await callback(reader, writer)
 
-
-class OutBound(ABC):
-    @abstractmethod
-    async def open_connection(
-        self,
-        host: str,
-        port: int,
-        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
-    ):
-        pass
+        await self.client_provider.open_connection(client_provider_callback)
 
 
 class BlockOutBound(OutBound):
-    async def open_connection(
-        self,
-        host: str,
-        port: int,
-        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
-    ):
+    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
         _ = host, port, callback
 
 
 class DirectOutBound(OutBound):
-    async def open_connection(
-        self,
-        host: str,
-        port: int,
-        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
-    ):
+    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
         reader, writer = await aio.open_connection(host, port)
         try:
             await callback(AIOReader(reader), AIOWriter(writer))
@@ -618,34 +610,21 @@ class DirectOutBound(OutBound):
             await writer.wait_closed()
 
 
-class ProxyOutBound(OutBound):
-    def __init__(self, client_provider: ClientProvider, proxy_client: ProxyClient):
-        self.client_provider = client_provider
-        self.proxy_client = proxy_client
+class MultiInBound(InBound):
+    def __init__(self, inbounds: Iterable[InBound]):
+        self.inbounds = inbounds
 
-    async def open_connection(
-        self,
-        host: str,
-        port: int,
-        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
-    ):
-        async def client_provider_callback(reader: AsyncReader, writer: AsyncWriter):
-            reader, writer = await self.proxy_client.wrap(reader, writer, host, port)
-            await callback(reader, writer)
-
-        await self.client_provider.open_connection(client_provider_callback)
+    async def start_server(self, callback: InBoundCallback):
+        await aio.gather(
+            *map(lambda inbound: inbound.start_server(callback), self.inbounds)
+        )
 
 
 class RandDispatchOutBound(OutBound):
     def __init__(self, outbounds: Iterable[OutBound]):
         self.outbounds = list(outbounds)
 
-    async def open_connection(
-        self,
-        host: str,
-        port: int,
-        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
-    ):
+    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
         outbound = random.choice(self.outbounds)
         await outbound.open_connection(host, port, callback)
 
@@ -673,12 +652,7 @@ class TagDispatchOutBound(OutBound):
     def match_tags(self, host: str) -> str:
         return match_tags(host, self.tags) or self.default_tag
 
-    async def open_connection(
-        self,
-        host: str,
-        port: int,
-        callback: Callable[[AsyncReader, AsyncWriter], Awaitable],
-    ):
+    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
         outbound = self.outbounds[self.match_tags(host)]
         await outbound.open_connection(host, port, callback)
 
@@ -831,16 +805,18 @@ class ProxyInBoundConfig(InBoundConfig):
         return ProxyInBound(server_provider=server_provider, proxy_server=proxy_server)
 
 
-class MultiInBoundConfig(InBoundConfig):
-    type = "multi"
+class ProxyOutBoundConfig(OutBoundConfig):
+    type = "proxy"
 
     @classmethod
-    def from_data(cls, data: dict) -> MultiInBound:
-        inbounds: Iterable[InBound] = map(
-            InBoundConfig.from_data_by_type,
-            data["inbounds"],
+    def from_data(cls, data: dict) -> ProxyOutBound:
+        client_provider: ClientProvider = ClientProviderConfig.from_data_by_type(
+            data["client_provider"]
         )
-        return MultiInBound(inbounds)
+        proxy_client: ProxyClient = ProxyClientConfig.from_data_by_type(
+            data["proxy_client"]
+        )
+        return ProxyOutBound(client_provider=client_provider, proxy_client=proxy_client)
 
 
 class BlockOutBoundConfig(OutBoundConfig):
@@ -861,18 +837,16 @@ class DirectOutBoundConfig(OutBoundConfig):
         return DirectOutBound()
 
 
-class ProxyOutBoundConfig(OutBoundConfig):
-    type = "proxy"
+class MultiInBoundConfig(InBoundConfig):
+    type = "multi"
 
     @classmethod
-    def from_data(cls, data: dict) -> ProxyOutBound:
-        client_provider: ClientProvider = ClientProviderConfig.from_data_by_type(
-            data["client_provider"]
+    def from_data(cls, data: dict) -> MultiInBound:
+        inbounds: Iterable[InBound] = map(
+            InBoundConfig.from_data_by_type,
+            data["inbounds"],
         )
-        proxy_client: ProxyClient = ProxyClientConfig.from_data_by_type(
-            data["proxy_client"]
-        )
-        return ProxyOutBound(client_provider=client_provider, proxy_client=proxy_client)
+        return MultiInBound(inbounds)
 
 
 class RandDispatchOutBoundConfig(OutBoundConfig):

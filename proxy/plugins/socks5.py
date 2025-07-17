@@ -4,6 +4,8 @@ import ipaddress as ia
 from proxy import (
     AsyncReader,
     AsyncWriter,
+    ProxyClientStream,
+    Stream,
     Struct,
     WrapStruct,
     DictStruct,
@@ -80,9 +82,7 @@ st_socks5_resp = DictStruct(
 
 
 class Socks5Server(ProxyServer):
-    async def wrap(
-        self, reader: AsyncReader, writer: AsyncWriter
-    ) -> tuple[AsyncReader, AsyncWriter, str, int]:
+    async def wrap(self, reader: AsyncReader, writer: AsyncWriter) -> ProxyClientStream:
         auth_req = await st_socks5_auth_req.read_async(reader)
         if auth_req["ver"] != 5 or 0 not in auth_req["meths"]:
             raise Exception("Invalid socks5 auth req", auth_req)
@@ -107,7 +107,7 @@ class Socks5Server(ProxyServer):
 class Socks5Client(ProxyClient):
     async def wrap(
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
-    ) -> tuple[AsyncReader, AsyncWriter]:
+    ) -> Stream:
         await st_socks5_auth_req.pack_one_then_write_async(
             writer, {"ver": 5, "meths": "\x00"}
         )
@@ -143,9 +143,7 @@ class TrojanServer(ProxyServer):
     def __init__(self, auth: bytes):
         self.auth = auth
 
-    async def wrap(
-        self, reader: AsyncReader, writer: AsyncWriter
-    ) -> tuple[AsyncReader, AsyncWriter, str, int]:
+    async def wrap(self, reader: AsyncReader, writer: AsyncWriter) -> ProxyClientStream:
         req = await st_trojan_req.read_async(reader)
         if req["auth"] != self.auth or req["cmd"] != 1 or len(req["rsv"]) != 0:
             raise Exception("Invlaid trojan req", req)
@@ -158,7 +156,7 @@ class TrojanClient(ProxyClient):
 
     async def wrap(
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
-    ) -> tuple[AsyncReader, AsyncWriter]:
+    ) -> Stream:
         await st_trojan_req.pack_one_then_write_async(
             writer,
             {

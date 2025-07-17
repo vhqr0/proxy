@@ -16,6 +16,7 @@ from proxy import (
     AsyncWriter,
     DictStruct,
     FixedFrame,
+    Stream,
     st_uint8,
     st_uint16_be,
     st_uint32_be,
@@ -38,10 +39,10 @@ VMESS_RESP_LEN_IV = b"AEAD Resp Header Len IV"
 VMESS_RESP_KEY = b"AEAD Resp Header Key"
 VMESS_RESP_IV = b"AEAD Resp Header IV"
 
+type HashFn = Callable[[bytes], bytes]
 
-def derive_hash_fn(
-    hash_fn: Callable[[bytes], bytes], key: bytes
-) -> Callable[[bytes], bytes]:
+
+def derive_hash_fn(hash_fn: HashFn, key: bytes) -> HashFn:
     """Given a hash fn and a key, derive a new hash fn based on hmac."""
     if len(key) > 64:
         key = hash_fn(key)
@@ -241,9 +242,8 @@ class VMessWriter(AsyncWriter):
         self.cryptor = VMessCryptor(key, iv)
         self.wait_req = True
 
-    def gen_req(self):
+    def gen_req(self) -> bytes:
         plen = getrandbits(4)
-        pad = randbytes(plen)
         req = st_vmess_req.pack_one(
             {
                 "ver": 1,
@@ -259,7 +259,7 @@ class VMessWriter(AsyncWriter):
                 "host": self.host,
             }
         )
-        return req + pad
+        return req + randbytes(plen)
 
     async def write_async(self, data: bytes):
         if len(data) > 0:
@@ -279,7 +279,7 @@ class VMessClient(ProxyClient):
 
     async def wrap(
         self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
-    ) -> tuple[AsyncReader, AsyncWriter]:
+    ) -> Stream:
         key, iv = randbytes(16), randbytes(16)
         rkey, riv = sha256_hash(key)[:16], sha256_hash(iv)[:16]
         verify = getrandbits(8)
