@@ -1,5 +1,6 @@
 from hashlib import sha224
 from ipaddress import IPv4Address, IPv6Address
+from pydantic import BaseModel
 
 from proxy import (
     AsyncReader,
@@ -172,32 +173,50 @@ class TrojanClient(ProxyClient):
 class Socks5ServerConfig(ProxyServerConfig):
     type = "socks5"
 
+    class Data(BaseModel):
+        pass
+
     @classmethod
     def from_data(cls, data: dict) -> Socks5Server:
-        _ = data
+        cls.Data.model_validate(data)
         return Socks5Server()
 
 
 class Socks5ClientConfig(ProxyClientConfig):
     type = "socks5"
 
+    class Data(BaseModel):
+        pass
+
     @classmethod
     def from_data(cls, data: dict) -> Socks5Client:
-        _ = data
+        cls.Data.model_validate(data)
         return Socks5Client()
+
+
+def trojan_auth(auth: str) -> bytes:
+    return sha224(auth.encode()).digest().hex().encode()
 
 
 class TrojanServerConfig(ProxyServerConfig):
     type = "trojan"
 
+    class Data(BaseModel):
+        auth: str
+
     @classmethod
     def from_data(cls, data: dict) -> TrojanServer:
-        return TrojanServer(sha224(data["auth"]).digest())
+        cls.Data.model_validate(data)
+        return TrojanServer(trojan_auth(data["auth"]))
 
 
 class TrojanClientConfig(ProxyClientConfig):
     type = "trojan"
 
+    class Data(BaseModel):
+        auth: str
+
     @classmethod
     def from_data(cls, data: dict) -> TrojanClient:
-        return TrojanClient(sha224(data["auth"]).digest())
+        cls.Data.model_validate(data)
+        return TrojanClient(trojan_auth(data["auth"]))

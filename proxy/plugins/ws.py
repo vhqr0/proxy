@@ -1,8 +1,11 @@
+from typing import Optional
+from collections.abc import Sequence
 import asyncio as aio
 import websockets
 import websockets.asyncio.connection as ws_conn
 import websockets.asyncio.server as ws_server
 import websockets.asyncio.client as ws_client
+from pydantic import BaseModel
 
 from proxy import (
     BufferedAsyncReader,
@@ -66,14 +69,28 @@ class WSClientProvider(ClientProvider):
 class WSServerProviderConfig(ServerProviderConfig):
     type = "ws"
 
+    class Data(BaseModel):
+        host: Optional[str] = None
+        port: Optional[int] = None
+
     @classmethod
     def from_data(cls, data: dict) -> WSServerProvider:
+        cls.Data.model_validate(data)
         return WSServerProvider(**data)
 
 
 class WSClientProviderConfig(ClientProviderConfig):
     type = "ws"
 
+    class Data(BaseModel):
+        uri: str
+        subprotocols: Optional[Sequence[str]] = None
+        host: Optional[str] = None
+        port: Optional[int] = None
+        ssl: Optional[bool] = None
+        server_hostname: Optional[str] = None
+
     @classmethod
     def from_data(cls, data: dict) -> WSClientProvider:
+        cls.Data.model_validate(data)
         return WSClientProvider(**data)
