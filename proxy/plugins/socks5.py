@@ -1,5 +1,5 @@
 from hashlib import sha224
-import ipaddress as ia
+from ipaddress import IPv4Address, IPv6Address
 
 from proxy import (
     AsyncReader,
@@ -22,14 +22,14 @@ from proxy import (
 
 st_ipv4 = WrapStruct(
     FixedFrame(4),
-    lambda s: ia.IPv4Address(s).packed,
-    lambda b: str(ia.IPv4Address(b)),
+    lambda s: IPv4Address(s).packed,
+    lambda b: str(IPv4Address(b)),
 )
 
 st_ipv6 = WrapStruct(
     FixedFrame(16),
-    lambda s: ia.IPv6Address(s).packed,
-    lambda b: str(ia.IPv6Address(b)),
+    lambda s: IPv6Address(s).packed,
+    lambda b: str(IPv6Address(b)),
 )
 
 st_socks5_str = WrapStruct(VarFrame(st_uint8), str.encode, bytes.decode)

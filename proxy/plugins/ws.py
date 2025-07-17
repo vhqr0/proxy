@@ -1,4 +1,3 @@
-from collections.abc import Callable, Awaitable
 import asyncio as aio
 import websockets
 import websockets.asyncio.connection as ws_conn

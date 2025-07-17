@@ -1,10 +1,10 @@
 from typing import Any, Optional
-from collections.abc import Callable, Awaitable, Iterable
+from collections.abc import Callable, Awaitable, Sequence
 from abc import ABC, abstractmethod
 import struct as format_struct
-import random
+from random import choice
+from logging import getLogger, Logger
 import json
-import logging
 import io
 import asyncio as aio
 
@@ -52,7 +52,7 @@ class AsyncedReader(AsyncReader):
 
 
 class BufferedReader(Reader):
-    def __init__(self, buffer=b"", buffer_limit=64 * 1024):
+    def __init__(self, buffer: bytes = b"", buffer_limit: int = 64 * 1024):
         self.buffer = buffer
         self.buffer_limit = buffer_limit
 
@@ -94,7 +94,7 @@ class BufferedReader(Reader):
 
 
 class BufferedAsyncReader(AsyncReader):
-    def __init__(self, buffer=b"", buffer_limit=64 * 1024):
+    def __init__(self, buffer: bytes = b"", buffer_limit: int = 64 * 1024):
         self.buffer = buffer
         self.buffer_limit = buffer_limit
 
@@ -240,7 +240,7 @@ class Struct(ABC):
             raise Exception("BIO not at EOF")
         return data
 
-    def unpack_many(self, b: bytes) -> Iterable[Any]:
+    def unpack_many(self, b: bytes) -> Sequence[Any]:
         bio = io.BytesIO(b)
         bio_reader = IOReader(bio)
         data = []
@@ -254,7 +254,7 @@ class Struct(ABC):
         self.write(bio_writer, data)
         return bio.getvalue()
 
-    def pack_many(self, data: Iterable[Any]) -> bytes:
+    def pack_many(self, data: Sequence[Any]) -> bytes:
         bio = io.BytesIO()
         bio_writer = IOWriter(bio)
         for _data in data:
@@ -265,13 +265,18 @@ class Struct(ABC):
         await writer.write_async(self.pack_one(data))
 
     async def pack_many_then_write_async(
-        self, writer: AsyncWriter, data: Iterable[Any]
+        self, writer: AsyncWriter, data: Sequence[Any]
     ):
         await writer.write_async(self.pack_many(data))
 
 
 class WrapStruct(Struct):
-    def __init__(self, struct: Struct, pack_fn: Callable, unpack_fn: Callable):
+    def __init__(
+        self,
+        struct: Struct,
+        pack_fn: Callable[[Any], Any],
+        unpack_fn: Callable[[Any], Any],
+    ):
         self.struct = struct
         self.pack_fn = pack_fn
         self.unpack_fn = unpack_fn
@@ -289,11 +294,11 @@ class WrapStruct(Struct):
         await self.struct.write_async(writer, self.pack_fn(data))
 
 
-type TupleContext = Iterable[Any]
+type TupleContext = Sequence[Any]
 
 
 class TupleStruct(Struct):
-    def __init__(self, structs: Iterable[Struct]):
+    def __init__(self, structs: Sequence[Struct]):
         self.structs = structs
 
     def read(self, reader: Reader) -> TupleContext:
@@ -314,7 +319,7 @@ type DictContextStruct = Struct | Callable[[DictContext], Struct]
 
 
 class DictStruct(Struct):
-    def __init__(self, key_structs: Iterable[tuple[str, DictContextStruct]]):
+    def __init__(self, key_structs: Sequence[tuple[str, DictContextStruct]]):
         self.key_structs = key_structs
 
     def read(self, reader: Reader) -> DictContext:
@@ -431,18 +436,18 @@ class FormatStruct(Struct):
             format = format_struct.Struct(format)
         self.format = format
 
-    def read(self, reader: Reader) -> Iterable[int]:
+    def read(self, reader: Reader) -> Sequence[int]:
         b = reader.readexactly(self.format.size)
         return self.format.unpack(b)
 
-    async def read_async(self, reader: AsyncReader) -> Iterable[int]:
+    async def read_async(self, reader: AsyncReader) -> Sequence[int]:
         b = await reader.readexactly_async(self.format.size)
         return self.format.unpack(b)
 
-    def write(self, writer: Writer, data: Iterable[int]):
+    def write(self, writer: Writer, data: Sequence[int]):
         writer.write(self.format.pack(*data))
 
-    async def writer(self, writer: AsyncWriter, data: Iterable[int]):
+    async def writer(self, writer: AsyncWriter, data: Sequence[int]):
         await writer.write_async(self.format.pack(*data))
 
 
@@ -611,7 +616,7 @@ class DirectOutBound(OutBound):
 
 
 class MultiInBound(InBound):
-    def __init__(self, inbounds: Iterable[InBound]):
+    def __init__(self, inbounds: Sequence[InBound]):
         self.inbounds = inbounds
 
     async def start_server(self, callback: InBoundCallback):
@@ -621,15 +626,19 @@ class MultiInBound(InBound):
 
 
 class RandDispatchOutBound(OutBound):
-    def __init__(self, outbounds: Iterable[OutBound]):
+    def __init__(self, outbounds: Sequence[OutBound]):
         self.outbounds = list(outbounds)
 
     async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
-        outbound = random.choice(self.outbounds)
+        outbound = choice(self.outbounds)
         await outbound.open_connection(host, port, callback)
 
 
-def match_tags(host: str, tags: dict[str, str]) -> Optional[str]:
+type Tag = str
+type Tags = dict[str, Tag]
+
+
+def match_tags(host: str, tags: Tags) -> Optional[Tag]:
     tag = tags.get(host)
     if tag is not None:
         return tag
@@ -641,15 +650,15 @@ def match_tags(host: str, tags: dict[str, str]) -> Optional[str]:
 class TagDispatchOutBound(OutBound):
     def __init__(
         self,
-        tags: dict[str, str],  # host -> tag
-        default_tag: str,
+        tags: Tags,  # host -> tag
+        default_tag: Tag,
         outbounds: dict[str, OutBound],  # tag -> outbound
     ):
         self.tags = tags
         self.default_tag = default_tag
         self.outbounds = outbounds
 
-    def match_tags(self, host: str) -> str:
+    def match_tags(self, host: str) -> Tag:
         return match_tags(host, self.tags) or self.default_tag
 
     async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
@@ -662,11 +671,11 @@ class Server:
         self,
         inbound: InBound,
         outbound: OutBound,
-        logger: Optional[logging.Logger] = None,
+        logger: Optional[Logger] = None,
     ):
         self.inbound = inbound
         self.outbound = outbound
-        self.logger = logger or logging.getLogger("proxy")
+        self.logger = logger or getLogger("proxy")
         self.tasks: set[aio.Task] = set()
 
     async def start_server(self):
@@ -842,9 +851,11 @@ class MultiInBoundConfig(InBoundConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> MultiInBound:
-        inbounds: Iterable[InBound] = map(
-            InBoundConfig.from_data_by_type,
-            data["inbounds"],
+        inbounds: Sequence[InBound] = list(
+            map(
+                InBoundConfig.from_data_by_type,
+                data["inbounds"],
+            )
         )
         return MultiInBound(inbounds)
 
@@ -854,9 +865,11 @@ class RandDispatchOutBoundConfig(OutBoundConfig):
 
     @classmethod
     def from_data(cls, data: dict) -> RandDispatchOutBound:
-        outbounds: Iterable[OutBound] = map(
-            OutBoundConfig.from_data_by_type,
-            data["outbounds"],
+        outbounds: Sequence[OutBound] = list(
+            map(
+                OutBoundConfig.from_data_by_type,
+                data["outbounds"],
+            )
         )
         return RandDispatchOutBound(outbounds)
 

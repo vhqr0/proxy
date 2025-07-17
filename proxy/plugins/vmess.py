@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Sequence
 from time import time
 from random import randbytes, getrandbits
 from functools import reduce, cached_property
@@ -71,7 +71,7 @@ def md5_hash(data: bytes) -> bytes:
     return md5(data).digest()
 
 
-def vmess_hash(keys: Iterable[bytes], data: bytes) -> bytes:
+def vmess_hash(keys: Sequence[bytes], data: bytes) -> bytes:
     hash_fn = reduce(derive_hash_fn, keys, sha256_hash)
     return hash_fn(data)
 
