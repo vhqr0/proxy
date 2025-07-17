@@ -136,12 +136,14 @@ wheels = [
 name = "proxy"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "pydantic" },
+]
 
 [package.optional-dependencies]
 vmessc = [
     { name = "cryptography" },
     { name = "pycryptodome" },
-    { name = "pydantic" },
     { name = "requests" },
     { name = "websockets" },
 ]
@@ -150,7 +152,7 @@ vmessc = [
 requires-dist = [
     { name = "cryptography", marker = "extra == 'vmessc'", specifier = ">=45.0.5" },
     { name = "pycryptodome", marker = "extra == 'vmessc'", specifier = ">=3.23.0" },
-    { name = "pydantic", marker = "extra == 'vmessc'", specifier = ">=2.11.7" },
+    { name = "pydantic", specifier = ">=2.11.7" },
     { name = "requests", marker = "extra == 'vmessc'", specifier = ">=2.32.4" },
     { name = "websockets", marker = "extra == 'vmessc'", specifier = ">=15.0.1" },
 ]

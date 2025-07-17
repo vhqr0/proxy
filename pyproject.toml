@@ -3,13 +3,14 @@ name = "proxy"
 version = "0.1.0"
 description = "Proxy tools."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.11.7",
+]
 
 [project.optional-dependencies]
 vmessc = [
     "cryptography>=45.0.5",
     "pycryptodome>=3.23.0",
-    "pydantic>=2.11.7",
     "requests>=2.32.4",
     "websockets>=15.0.1",
 ]
