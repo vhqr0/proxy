@@ -714,7 +714,7 @@ class Config(ABC):
 
 
 class RegistrableConfig(Config):
-    registry: dict
+    registry: dict[str, type]
     type: str
 
     def __init_subclass__(cls):
@@ -723,12 +723,12 @@ class RegistrableConfig(Config):
         return super().__init_subclass__()
 
     @classmethod
-    def from_data_by_type(cls, data: dict) -> Any:
-        def unpack_type(type, **data):
-            return type, data
-
-        type, data = unpack_type(**data)
+    def from_kwargs_by_type(cls, type, **data) -> Any:
         return cls.registry[type].from_data(data)
+
+    @classmethod
+    def from_data_by_type(cls, data: dict) -> Any:
+        return cls.from_kwargs_by_type(cls, **data)
 
 
 class ProxyServerConfig(RegistrableConfig):
