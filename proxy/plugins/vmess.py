@@ -86,14 +86,14 @@ def fnv1a(data: bytes) -> int:
 
 class VMessID(UUID):
     @cached_property
-    def cmd_key(self):
+    def cmd_key(self) -> bytes:
         return md5_hash(self.bytes + VMESS_MAGIC)
 
     @cached_property
-    def auth_key(self):
+    def auth_key(self) -> bytes:
         return vmess_hash([VMESS_KDF, VMESS_AID], self.cmd_key)[:16]
 
-    def encrypt_req(self, req: bytes):
+    def encrypt_req(self, req: bytes) -> bytes:
         req += st_uint32_be.pack_one(fnv1a(req))
         aid = st_uint64_be.pack_one(int(time())) + randbytes(4)
         aid += st_uint32_be.pack_one(crc32(aid))
@@ -115,7 +115,7 @@ class VMessID(UUID):
 
 
 class VMessCryptor:
-    def __init__(self, key: bytes, iv: bytes, count=0):
+    def __init__(self, key: bytes, iv: bytes, count: int = 0):
         self.shake = SHAKE128_XOF(iv)
         self.aead = AESGCM(key)
         self.iv = iv[2:12]

@@ -16,8 +16,8 @@ import json
 #     \_ tags.json                  # tags config generated from domain list
 
 
-# supported command: domain, full, include
-# unsupported command: regexp, keyword
+# supported commands: domain, full, include
+# unsupported commands: regexp, keyword
 # attrs are partially supported: only support one optional attr.
 
 line_re = re.compile(r"^(([^\s:]+):)?([^\s]+)\s*(@([^\s]+))?$")
@@ -38,7 +38,7 @@ entries = [
 
 tags_dict = {"ads": "block", "cn": "direct", "!cn": "proxy"}
 
-tags_path: str = ".vmessc/tags.json"
+tags_path = ".vmessc/tags.json"
 
 
 class DomainList:
