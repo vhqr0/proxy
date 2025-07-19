@@ -59,7 +59,7 @@ class DomainList:
     def tags_provider(self):
         return {"type": "data", "tags": self.tags}
 
-    def load_entries(self):
+    def load(self):
         for name, default_tag in self.entries:
             self.load_entry(name, default_tag)
 
@@ -98,7 +98,7 @@ def main():
     )
     match args.command:
         case "gen":
-            dl.load_entries()
+            dl.load()
             dl.gen()
         case command:
             raise Exception("Invalid command", command)
