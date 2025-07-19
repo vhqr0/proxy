@@ -21,10 +21,15 @@ socks5_atype_dict: dict[int, Struct] = {
     4: st_ipv6,
 }
 
+
+def st_socks5_host(data: DictContext) -> Struct:
+    return socks5_atype_dict[data["atype"]]
+
+
 st_socks5_addr = DictStruct(
     [
         ("atype", st_uint8),
-        ("host", lambda data: socks5_atype_dict[data["atype"]]),
+        ("host", st_socks5_host),
         ("port", st_uint16_be),
     ]
 )
