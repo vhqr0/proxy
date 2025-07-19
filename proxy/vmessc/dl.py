@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-from collections.abc import Sequence
 import re
 import json
 
@@ -31,10 +30,7 @@ line_re = re.compile(r"^(([^\s:]+):)?([^\s]+)\s*(@([^\s]+))?$")
 
 data_dir = ".vmessc/domain-list-community/data/"
 
-entries = [
-    ("cn", "cn"),
-    ("geolocation-!cn", "!cn"),
-]
+entries = {"cn": "cn", "geolocation-!cn": "!cn"}
 
 tags_dict = {"ads": "block", "cn": "direct", "!cn": "proxy"}
 
@@ -45,7 +41,7 @@ class DomainList:
     def __init__(
         self,
         data_dir: str = data_dir,
-        entries: Sequence[tuple[str, str]] = entries,
+        entries: dict[str, str] = entries,
         tags_dict: dict[str, str] = tags_dict,
         tags_path: str = tags_path,
     ):
@@ -60,7 +56,7 @@ class DomainList:
         return {"type": "data", "tags": self.tags}
 
     def load(self):
-        for name, default_tag in self.entries:
+        for name, default_tag in self.entries.items():
             self.load_entry(name, default_tag)
 
     def load_entry(self, name: str, default_tag: str):
@@ -89,6 +85,8 @@ class DomainList:
 def main():
     parser = ArgumentParser()
     parser.add_argument("--data-dir", default=data_dir)
+    parser.add_argument("--entries", type=json.loads, default=entries)
+    parser.add_argument("--tags-dict", type=json.loads, default=tags_dict)
     parser.add_argument("--tags-path", default=tags_path)
     parser.add_argument("command")
     args = parser.parse_args()
