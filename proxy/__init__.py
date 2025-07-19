@@ -761,7 +761,7 @@ class RegistrableConfig(Config):
 
     @classmethod
     def from_data_by_type(cls, data: dict) -> Any:
-        return cls.from_kwargs_by_type(cls, **data)
+        return cls.from_kwargs_by_type(**data)
 
 
 class ProxyServerConfig(RegistrableConfig):
