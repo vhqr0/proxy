@@ -1,0 +1,31 @@
+{
+  "plugins": [
+    "proxy.plugins.ws",
+    "proxy.plugins.socks5",
+    "proxy.plugins.vmess"
+  ],
+  "logger": {
+    "version": 1,
+    "handlers": {
+      "console": { "class": "logging.StreamHandler", "level": "INFO" }
+    },
+    "loggers": { "proxy": { "level": "INFO", "handlers": ["console"] } }
+  },
+  "server": {
+    "inbound": {
+      "type": "proxy",
+      "server_provider": { "type": "tcp", "port": 1080 },
+      "proxy_server": { "type": "socks5" }
+    },
+    "outbound": {
+      "type": "tag_dispatch",
+      "tags": { "type": "json", "path": ".vmessc/tags.json" },
+      "default_tag": "direct",
+      "outbounds": {
+        "direct": { "type": "direct" },
+        "block": { "type": "block" },
+        "proxy": { "type": "json", "path": ".vmessc/outbound.json" }
+      }
+    }
+  }
+}
