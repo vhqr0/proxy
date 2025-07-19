@@ -1,6 +1,5 @@
 from hashlib import sha224
 from ipaddress import IPv4Address, IPv6Address
-from pydantic import BaseModel
 
 from proxy import (
     AsyncReader,
@@ -173,25 +172,25 @@ class TrojanClient(ProxyClient):
 class Socks5ServerConfig(ProxyServerConfig):
     type = "socks5"
 
-    class Data(BaseModel):
-        pass
+    @classmethod
+    def from_kwargs(cls) -> Socks5Server:
+        return Socks5Server()
 
     @classmethod
     def from_data(cls, data: dict) -> Socks5Server:
-        cls.Data.model_validate(data)
-        return Socks5Server()
+        return cls.from_kwargs(**data)
 
 
 class Socks5ClientConfig(ProxyClientConfig):
     type = "socks5"
 
-    class Data(BaseModel):
-        pass
+    @classmethod
+    def from_kwargs(cls) -> Socks5Client:
+        return Socks5Client()
 
     @classmethod
     def from_data(cls, data: dict) -> Socks5Client:
-        cls.Data.model_validate(data)
-        return Socks5Client()
+        return cls.from_kwargs(**data)
 
 
 def trojan_auth(auth: str) -> bytes:
@@ -201,22 +200,22 @@ def trojan_auth(auth: str) -> bytes:
 class TrojanServerConfig(ProxyServerConfig):
     type = "trojan"
 
-    class Data(BaseModel):
-        auth: str
+    @classmethod
+    def from_kwargs(cls, auth: str) -> TrojanServer:
+        return TrojanServer(trojan_auth(auth))
 
     @classmethod
     def from_data(cls, data: dict) -> TrojanServer:
-        cls.Data.model_validate(data)
-        return TrojanServer(trojan_auth(data["auth"]))
+        return cls.from_kwargs(**data)
 
 
 class TrojanClientConfig(ProxyClientConfig):
     type = "trojan"
 
-    class Data(BaseModel):
-        auth: str
+    @classmethod
+    def from_kwargs(cls, auth: str) -> TrojanClient:
+        return TrojanClient(trojan_auth(auth))
 
     @classmethod
     def from_data(cls, data: dict) -> TrojanClient:
-        cls.Data.model_validate(data)
-        return TrojanClient(trojan_auth(data["auth"]))
+        return cls.from_kwargs(**data)

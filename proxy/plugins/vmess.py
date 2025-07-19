@@ -10,7 +10,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.primitives.ciphers.modes import ECB
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from pydantic import BaseModel
 
 from proxy import (
     AsyncReader,
@@ -294,10 +293,10 @@ class VMessClient(ProxyClient):
 class VMessClientConfig(ProxyClientConfig):
     type = "vmess"
 
-    class Data(BaseModel):
-        id: str
+    @classmethod
+    def from_kwargs(cls, id: str) -> VMessClient:
+        return VMessClient(id=VMessID(id))
 
     @classmethod
     def from_data(cls, data: dict) -> VMessClient:
-        cls.Data.model_validate(data)
-        return VMessClient(id=VMessID(data["id"]))
+        return cls.from_kwargs(**data)

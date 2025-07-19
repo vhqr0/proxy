@@ -7,7 +7,6 @@ from logging import getLogger, Logger
 import json
 import io
 import asyncio as aio
-from pydantic import BaseModel
 
 
 class Reader(ABC):
@@ -771,28 +770,16 @@ class ClientProviderConfig(RegistrableConfig):
 class TCPServerProviderConfig(ServerProviderConfig):
     type = "tcp"
 
-    class Data(BaseModel):
-        host: Optional[str] = None
-        port: Optional[int] = None
-
     @classmethod
     def from_data(cls, data: dict) -> TCPServerProvider:
-        cls.Data.model_validate(data)
         return TCPServerProvider(**data)
 
 
 class TCPClientProviderConfig(ClientProviderConfig):
     type = "tcp"
 
-    class Data(BaseModel):
-        host: Optional[str] = None
-        port: Optional[int] = None
-        ssl: Optional[bool] = None
-        server_hostname: Optional[str] = None
-
     @classmethod
     def from_data(cls, data: dict) -> TCPClientProvider:
-        cls.Data.model_validate(data)
         return TCPClientProvider(**data)
 
 
@@ -817,99 +804,85 @@ class OutBoundConfig(RegistrableConfig):
 class ProxyInBoundConfig(InBoundConfig):
     type = "proxy"
 
-    class Data(BaseModel):
-        server_provider: dict
-        proxy_server: dict
+    @classmethod
+    def from_kwargs(cls, server_provider: dict, proxy_server: dict) -> ProxyInBound:
+        return ProxyInBound(
+            server_provider=ServerProviderConfig.from_data_by_type(server_provider),
+            proxy_server=ProxyServerConfig.from_data_by_type(proxy_server),
+        )
 
     @classmethod
     def from_data(cls, data: dict) -> ProxyInBound:
-        cls.Data.model_validate(data)
-        server_provider: ServerProvider = ServerProviderConfig.from_data_by_type(
-            data["server_provider"]
-        )
-        proxy_server: ProxyServer = ProxyServerConfig.from_data_by_type(
-            data["proxy_server"]
-        )
-        return ProxyInBound(server_provider=server_provider, proxy_server=proxy_server)
+        return cls.from_kwargs(**data)
 
 
 class ProxyOutBoundConfig(OutBoundConfig):
     type = "proxy"
 
-    class Data(BaseModel):
-        client_provider: dict
-        proxy_client: dict
+    @classmethod
+    def from_kwargs(cls, client_provider: dict, proxy_client: dict) -> ProxyOutBound:
+        return ProxyOutBound(
+            client_provider=ClientProviderConfig.from_data_by_type(client_provider),
+            proxy_client=ProxyClientConfig.from_data_by_type(proxy_client),
+        )
 
     @classmethod
     def from_data(cls, data: dict) -> ProxyOutBound:
-        cls.Data.model_validate(data)
-        client_provider: ClientProvider = ClientProviderConfig.from_data_by_type(
-            data["client_provider"]
-        )
-        proxy_client: ProxyClient = ProxyClientConfig.from_data_by_type(
-            data["proxy_client"]
-        )
-        return ProxyOutBound(client_provider=client_provider, proxy_client=proxy_client)
+        return cls.from_kwargs(**data)
 
 
 class BlockOutBoundConfig(OutBoundConfig):
     type = "block"
 
-    class Data(BaseModel):
-        pass
+    @classmethod
+    def from_kwargs(cls) -> BlockOutBound:
+        return BlockOutBound()
 
     @classmethod
     def from_data(cls, data: dict) -> BlockOutBound:
-        cls.Data.model_validate(data)
-        return BlockOutBound()
+        return cls.from_kwargs(**data)
 
 
 class DirectOutBoundConfig(OutBoundConfig):
     type = "direct"
 
-    class Data(BaseModel):
-        pass
+    @classmethod
+    def from_kwargs(cls) -> DirectOutBound:
+        return DirectOutBound()
 
     @classmethod
     def from_data(cls, data: dict) -> DirectOutBound:
-        cls.Data.model_validate(data)
-        return DirectOutBound()
+        return cls.from_kwargs(**data)
 
 
 class MultiInBoundConfig(InBoundConfig):
     type = "multi"
 
-    class Data(BaseModel):
-        inbounds: Sequence[dict]
+    @classmethod
+    def from_kwargs(cls, inbounds: Sequence[dict]) -> MultiInBound:
+        return MultiInBound(
+            inbounds=[InBoundConfig.from_data_by_type(inbound) for inbound in inbounds]
+        )
 
     @classmethod
     def from_data(cls, data: dict) -> MultiInBound:
-        cls.Data.model_validate(data)
-        inbounds: Sequence[InBound] = list(
-            map(
-                InBoundConfig.from_data_by_type,
-                data["inbounds"],
-            )
-        )
-        return MultiInBound(inbounds)
+        return cls.from_kwargs(**data)
 
 
 class RandDispatchOutBoundConfig(OutBoundConfig):
     type = "rand_dispatch"
 
-    class Data(BaseModel):
-        outbounds: Sequence[dict]
+    @classmethod
+    def from_kwargs(cls, outbounds: Sequence[dict]) -> RandDispatchOutBound:
+        return RandDispatchOutBound(
+            outbounds=[
+                OutBoundConfig.from_data_by_type(outbound) for outbound in outbounds
+            ]
+        )
 
     @classmethod
     def from_data(cls, data: dict) -> RandDispatchOutBound:
-        cls.Data.model_validate(data)
-        outbounds: Sequence[OutBound] = list(
-            map(
-                OutBoundConfig.from_data_by_type,
-                data["outbounds"],
-            )
-        )
-        return RandDispatchOutBound(outbounds)
+        return cls.from_kwargs(**data)
 
 
 class TagsProviderConfig(RegistrableConfig):
@@ -924,77 +897,77 @@ class TagsProviderConfig(RegistrableConfig):
 class MultiTagsProviderConfig(TagsProviderConfig):
     type = "multi"
 
-    class Data(BaseModel):
-        providers: Sequence[dict]
-
     @classmethod
-    def from_data(cls, data: dict) -> Tags:
-        cls.Data.model_validate(data)
+    def from_kwargs(cls, providers: Sequence[dict]) -> Tags:
         tags: Tags = dict()
-        for provider in data["providers"]:
+        for provider in providers:
             provider_tags: Tags = TagsProviderConfig.from_data_by_type(provider)
             for host, tag in provider_tags:
                 tags[host] = tag
         return tags
 
+    @classmethod
+    def from_data(cls, data: dict) -> Tags:
+        return cls.from_kwargs(**data)
+
 
 class DataTagsProviderConfig(TagsProviderConfig):
     type = "data"
 
-    class Data(BaseModel):
-        tags: Tags
+    @classmethod
+    def from_kwargs(cls, tags: Tags) -> Tags:
+        return tags
 
     @classmethod
-    def from_data(cls, data: dict) -> dict[str, str]:
-        cls.Data.model_validate(data)
-        return data["tags"]
+    def from_data(cls, data: dict) -> Tags:
+        return cls.from_kwargs(**data)
 
 
 class TagDispatchOutBoundConfig(OutBoundConfig):
     type = "tag_dispatch"
 
-    class Data(BaseModel):
-        tags: dict
-        default_tag: Tag
-        outbounds: dict[str, dict]
-
     @classmethod
-    def from_data(cls, data: dict) -> TagDispatchOutBound:
-        cls.Data.model_validate(data)
+    def from_kwargs(
+        cls, tags: dict, default_tag: Tag, outbounds: dict[str, dict]
+    ) -> TagDispatchOutBound:
         return TagDispatchOutBound(
-            tags=TagsProviderConfig.from_data_by_type(data["tags"]),
-            default_tag=data["default_tag"],
+            tags=TagsProviderConfig.from_data_by_type(tags),
+            default_tag=default_tag,
             outbounds={
                 tag: OutBoundConfig.from_data_by_type(outbound)
-                for tag, outbound in data["outbounds"].items()
+                for tag, outbound in outbounds.items()
             },
         )
 
+    @classmethod
+    def from_data(cls, data: dict) -> TagDispatchOutBound:
+        return cls.from_kwargs(**data)
+
 
 class ServerConfig(Config):
-    class Data(BaseModel):
-        inbound: dict
-        outbound: dict
+    @classmethod
+    def from_kwargs(cls, inbound: dict, outbound: dict) -> Server:
+        return Server(
+            inbound=InBoundConfig.from_data_by_type(inbound),
+            outbound=OutBoundConfig.from_data_by_type(outbound),
+        )
 
     @classmethod
     def from_data(cls, data: dict) -> Server:
-        cls.Data.model_validate(data)
-        inbound = InBoundConfig.from_data_by_type(data["inbound"])
-        outbound = OutBoundConfig.from_data_by_type(data["outbound"])
-        return Server(inbound=inbound, outbound=outbound)
+        return cls.from_kwargs(**data)
 
 
 class JsonConfig(RegistrableConfig):
     type = "json"
 
-    class Data(BaseModel):
-        path: str
+    @classmethod
+    def from_kwargs(cls, path: str) -> Any:
+        with open(path, "r") as f:
+            return cls.from_data_by_type(json.load(f))
 
     @classmethod
     def from_data(cls, data: dict) -> Any:
-        cls.Data.model_validate(data)
-        with open(data["path"], "r") as f:
-            return cls.from_data_by_type(json.load(f))
+        return cls.from_kwargs(**data)
 
 
 class JsonInBoundConfig(JsonConfig, InBoundConfig):
