@@ -11,22 +11,7 @@ from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.primitives.ciphers.modes import ECB
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from proxy import (
-    AsyncReader,
-    BufferedAsyncReader,
-    AsyncWriter,
-    DictStruct,
-    FixedFrame,
-    Stream,
-    StructError,
-    st_uint8,
-    st_uint16_be,
-    st_uint32_be,
-    st_uint64_be,
-    st_uint8_var_str,
-    ProxyClient,
-    ProxyClientConfig,
-)
+from proxy import *
 
 
 VMESS_MAGIC = b"c48619fe-8f02-49e0-b9e9-edf763e17e21"

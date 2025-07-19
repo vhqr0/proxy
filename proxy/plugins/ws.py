@@ -1,19 +1,9 @@
-import asyncio as aio
 import websockets
 import websockets.asyncio.connection as ws_conn
 import websockets.asyncio.server as ws_server
 import websockets.asyncio.client as ws_client
 
-from proxy import (
-    BufferedAsyncReader,
-    AsyncWriter,
-    ClientCallback,
-    ServerCallback,
-    ServerProvider,
-    ClientProvider,
-    ServerProviderConfig,
-    ClientProviderConfig,
-)
+from proxy import *
 
 
 class WSReader(BufferedAsyncReader):
@@ -50,8 +40,9 @@ class WSServerProvider(ServerProvider):
         async def ws_callback(ws: ws_conn.Connection):
             await callback(WSReader(ws), WSWriter(ws))
 
-        async with ws_server.serve(ws_callback, **self.kwargs):
-            await aio.get_running_loop().create_future()
+        server = await ws_server.serve(ws_callback, **self.kwargs)
+        async with server:
+            await server.serve_forever()
 
 
 class WSClientProvider(ClientProvider):

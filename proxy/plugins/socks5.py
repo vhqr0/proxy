@@ -1,26 +1,7 @@
 from hashlib import sha224
 from ipaddress import IPv4Address, IPv6Address
 
-from proxy import (
-    AsyncReader,
-    AsyncWriter,
-    ProxyClientStream,
-    Stream,
-    Struct,
-    StructError,
-    WrapStruct,
-    DictStruct,
-    FixedFrame,
-    VarFrame,
-    st_uint8,
-    st_uint16_be,
-    st_http_line,
-    st_uint8_var_str,
-    ProxyServer,
-    ProxyClient,
-    ProxyServerConfig,
-    ProxyClientConfig,
-)
+from proxy import *
 
 st_ipv4 = WrapStruct(
     FixedFrame(4),
