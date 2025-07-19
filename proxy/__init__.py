@@ -259,7 +259,7 @@ class Struct(ABC):
     def unpack_many(self, b: bytes) -> Sequence[Any]:
         bio = io.BytesIO(b)
         bio_reader = IOReader(bio)
-        data = []
+        data = list()
         while bio.tell() != len(b):
             data.append(self.read(bio_reader))
         return data
@@ -318,13 +318,13 @@ class TupleStruct(Struct):
         self.structs = structs
 
     def read(self, reader: Reader) -> TupleContext:
-        data: TupleContext = []
+        data: TupleContext = list()
         for struct in self.structs:
             data.append(struct.read(reader))
         return data
 
     async def read_async(self, reader: AsyncReader) -> TupleContext:
-        data: TupleContext = []
+        data: TupleContext = list()
         for struct in self.structs:
             data.append(await struct.read_async(reader))
         return data
