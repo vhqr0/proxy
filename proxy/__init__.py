@@ -51,6 +51,14 @@ class AsyncedReader(AsyncReader):
         return self.reader.readuntil(sep)
 
 
+class BufferLimitOverrunError(Exception):
+    pass
+
+
+class BufferIncompleteReadError(EOFError):
+    pass
+
+
 class BufferedReader(Reader):
     def __init__(self, buffer: bytes = b"", buffer_limit: int = 64 * 1024):
         self.buffer = buffer
@@ -62,10 +70,10 @@ class BufferedReader(Reader):
 
     def peek_more(self):
         if len(self.buffer) >= self.buffer_limit:
-            raise Exception("Buffer exceed limit")
+            raise BufferLimitOverrunError()
         b = self.read1()
         if len(b) == 0:
-            raise Exception("Read at EOF")
+            raise BufferIncompleteReadError()
         self.buffer += b
 
     def read(self) -> bytes:
@@ -104,10 +112,10 @@ class BufferedAsyncReader(AsyncReader):
 
     async def peek_more_async(self):
         if len(self.buffer) >= self.buffer_limit:
-            raise Exception("Buffer exceed limit")
+            raise BufferLimitOverrunError()
         b = await self.read1_async()
         if len(b) == 0:
-            raise Exception("Read at EOF")
+            raise BufferIncompleteReadError()
         self.buffer += b
 
     async def read_async(self) -> bytes:
@@ -215,6 +223,14 @@ async def pipe_async(reader: AsyncReader, writer: AsyncWriter):
             await writer.write_async(b)
 
 
+class StructError(Exception):
+    pass
+
+
+class InvalidUnpackError(Exception):
+    pass
+
+
 class Struct(ABC):
     @abstractmethod
     def read(self, reader: Reader) -> Any:
@@ -237,7 +253,7 @@ class Struct(ABC):
         bio_reader = IOReader(bio)
         data = self.read(bio_reader)
         if bio.tell() != len(b):
-            raise Exception("BIO not at EOF")
+            raise InvalidUnpackError()
         return data
 
     def unpack_many(self, b: bytes) -> Sequence[Any]:
@@ -313,6 +329,14 @@ class TupleStruct(Struct):
             data.append(await struct.read_async(reader))
         return data
 
+    def write(self, writer: Writer, data: TupleContext):
+        for i in range(len(self.structs)):
+            self.structs[i].write(writer, data[i])
+
+    async def write_async(self, writer: AsyncWriter, data: TupleContext):
+        for i in range(len(self.structs)):
+            await self.structs[i].write_async(writer, data[i])
+
 
 type DictContext = dict[str, Any]
 type DictContextStruct = Struct | Callable[[DictContext], Struct]
@@ -369,6 +393,10 @@ class Frame(Struct):
         pass
 
 
+class InvalidFixedFrameLengthError(StructError):
+    pass
+
+
 class FixedFrame(Frame):
     def __init__(self, length: int):
         self.length = length
@@ -381,12 +409,12 @@ class FixedFrame(Frame):
 
     def write(self, writer: Writer, data: bytes):
         if len(data) != self.length:
-            raise Exception("Struct validation error")
+            raise InvalidFixedFrameLengthError()
         writer.write(data)
 
     async def write_async(self, writer: AsyncWriter, data: bytes):
         if len(data) != self.length:
-            raise Exception("Struct validation error")
+            raise InvalidFixedFrameLengthError()
         await writer.write_async(data)
 
 
@@ -486,6 +514,11 @@ st_int64_le = IntStruct("<q")
 st_uint16_le = IntStruct("<H")
 st_uint32_le = IntStruct("<L")
 st_uint64_le = IntStruct("<Q")
+
+st_unix_line = WrapStruct(DelimitedFrame(b"\n"), str.encode, bytes.decode)
+st_http_line = WrapStruct(DelimitedFrame(b"\r\n"), str.encode, bytes.decode)
+st_uint8_var_str = WrapStruct(VarFrame(st_uint8), str.encode, bytes.decode)
+
 
 type Stream = tuple[AsyncReader, AsyncWriter]
 type StreamCallback = Callable[[AsyncReader, AsyncWriter], Awaitable]

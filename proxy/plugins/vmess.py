@@ -18,14 +18,15 @@ from proxy import (
     DictStruct,
     FixedFrame,
     Stream,
+    StructError,
     st_uint8,
     st_uint16_be,
     st_uint32_be,
     st_uint64_be,
+    st_uint8_var_str,
     ProxyClient,
     ProxyClientConfig,
 )
-from proxy.plugins.socks5 import st_socks5_str
 
 
 VMESS_MAGIC = b"c48619fe-8f02-49e0-b9e9-edf763e17e21"
@@ -173,9 +174,17 @@ st_vmess_req = DictStruct(
         ("cmd", st_uint8),
         ("port", st_uint16_be),
         ("atype", st_uint8),
-        ("host", st_socks5_str),
+        ("host", st_uint8_var_str),
     ]
 )
+
+
+class VMessStructError(StructError):
+    pass
+
+
+class VMessAuthError(StructError):
+    pass
 
 
 class VMessReader(BufferedAsyncReader):
@@ -210,8 +219,10 @@ class VMessReader(BufferedAsyncReader):
             vmess_hash([VMESS_KDF, VMESS_RESP_IV], self.iv)[:12],
             eresp,
         )
-        if resp[0] != self.verify or resp[1:] != b"\x00\x00\x00":
-            raise Exception("Invalid vmess resp")
+        if resp[1:] != b"\x00\x00\x00":
+            raise VMessStructError()
+        if resp[0] != self.verify:
+            raise VMessAuthError()
 
     async def read1_async(self) -> bytes:
         if self.wait_resp:

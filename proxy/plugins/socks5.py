@@ -7,13 +7,15 @@ from proxy import (
     ProxyClientStream,
     Stream,
     Struct,
+    StructError,
     WrapStruct,
     DictStruct,
     FixedFrame,
-    DelimitedFrame,
     VarFrame,
     st_uint8,
     st_uint16_be,
+    st_http_line,
+    st_uint8_var_str,
     ProxyServer,
     ProxyClient,
     ProxyServerConfig,
@@ -32,10 +34,8 @@ st_ipv6 = WrapStruct(
     lambda b: str(IPv6Address(b)),
 )
 
-st_socks5_str = WrapStruct(VarFrame(st_uint8), str.encode, bytes.decode)
-
 socks5_atype_dict: dict[int, Struct] = {
-    3: st_socks5_str,
+    3: st_uint8_var_str,
     1: st_ipv4,
     4: st_ipv6,
 }
@@ -81,17 +81,21 @@ st_socks5_resp = DictStruct(
 )
 
 
+class Socks5StructError(StructError):
+    pass
+
+
 class Socks5Server(ProxyServer):
     async def wrap(self, reader: AsyncReader, writer: AsyncWriter) -> ProxyClientStream:
         auth_req = await st_socks5_auth_req.read_async(reader)
         if auth_req["ver"] != 5 or 0 not in auth_req["meths"]:
-            raise Exception("Invalid socks5 auth req", auth_req)
+            raise Socks5StructError("Invalid socks5 auth req", auth_req)
         await st_socks5_auth_resp.pack_one_then_write_async(
             writer, {"ver": 5, "meth": 0}
         )
         req = await st_socks5_req.read_async(reader)
         if req["ver"] != 5 or req["cmd"] != 1:
-            raise Exception("Invalid socks5 req", req)
+            raise Socks5StructError("Invalid socks5 req", req)
         await st_socks5_resp.pack_one_then_write_async(
             writer,
             {
@@ -113,7 +117,7 @@ class Socks5Client(ProxyClient):
         )
         auth_resp = await st_socks5_auth_resp.read_async(reader)
         if auth_resp["ver"] != 5 or auth_resp["meth"] != 0:
-            raise Exception("Invalid socks5 auth resp", auth_resp)
+            raise Socks5StructError("Invalid socks5 auth resp", auth_resp)
         await st_socks5_req.pack_one_then_write_async(
             writer,
             {
@@ -125,33 +129,43 @@ class Socks5Client(ProxyClient):
         )
         resp = await st_socks5_resp.read_async(reader)
         if resp["ver"] != 5 or resp["status"] != 0:
-            raise Exception("Invalid socks5 resp", resp)
+            raise Socks5StructError("Invalid socks5 resp", resp)
         return reader, writer
 
 
 st_trojan_req = DictStruct(
     [
-        ("auth", DelimitedFrame(b"\r\n")),
+        ("auth", st_http_line),
         ("cmd", st_uint8),
         ("addr", st_socks5_addr),
-        ("rsv", DelimitedFrame(b"\r\n")),
+        ("rsv", st_http_line),
     ]
 )
 
 
+class TrojanStructError(StructError):
+    pass
+
+
+class TrojanAuthError(StructError):
+    pass
+
+
 class TrojanServer(ProxyServer):
-    def __init__(self, auth: bytes):
+    def __init__(self, auth: str):
         self.auth = auth
 
     async def wrap(self, reader: AsyncReader, writer: AsyncWriter) -> ProxyClientStream:
         req = await st_trojan_req.read_async(reader)
-        if req["auth"] != self.auth or req["cmd"] != 1 or len(req["rsv"]) != 0:
-            raise Exception("Invlaid trojan req", req)
+        if req["cmd"] != 1 or req["rsv"] != "":
+            raise TrojanStructError("Invlaid trojan req", req)
+        if req["auth"] != self.auth:
+            raise TrojanAuthError("Invalid trojan req", req)
         return reader, writer, req["addr"]["host"], req["addr"]["port"]
 
 
 class TrojanClient(ProxyClient):
-    def __init__(self, auth: bytes):
+    def __init__(self, auth: str):
         self.auth = auth
 
     async def wrap(
@@ -193,8 +207,8 @@ class Socks5ClientConfig(ProxyClientConfig):
         return cls.from_kwargs(**data)
 
 
-def trojan_auth(auth: str) -> bytes:
-    return sha224(auth.encode()).digest().hex().encode()
+def trojan_auth(auth: str) -> str:
+    return sha224(auth.encode()).digest().hex()
 
 
 class TrojanServerConfig(ProxyServerConfig):
