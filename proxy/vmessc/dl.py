@@ -7,17 +7,27 @@ import json
 #
 # origin: https://github.com/v2fly/domain-list-community
 # fork: https://github.com/vhqr0/domain-list-community
+#
+# Tree of .vmessc:
+#
+#   .vmessc/
+#     \_ domain-list-community/     # repo of domain-list-community
+#          \_ data/                 # data dir of domain list
+#     \_ tags.json                  # tags config generated from domain list
+
+
+# supported command: domain, full, include
+# unsupported command: regexp, keyword
+# attrs are partially supported: only support one optional attr.
 
 line_re = re.compile(r"^(([^\s:]+):)?([^\s]+)\s*(@([^\s]+))?$")
 
 # line_re.match("baidu.com").groups()
-# => (None, None, 'baidu.com', None, None)
+#   => (None, None, 'baidu.com', None, None)
 # line_re.match("domain:baidu.com @cn").groups()
-# => ('domain:', 'domain', 'baidu.com', '@cn', 'cn')
+#   => ('domain:', 'domain', 'baidu.com', '@cn', 'cn')
 # line_re.match("include:baidu").groups()
-# => ('include:', 'include', 'baidu', None, None)
-
-tags_dict = {"ads": "block", "cn": "direct", "!cn": "proxy"}
+#   => ('include:', 'include', 'baidu', None, None)
 
 data_dir = ".vmessc/domain-list-community/data/"
 
@@ -26,6 +36,10 @@ entries = [
     ("geolocation-!cn", "!cn"),
 ]
 
+tags_dict = {"ads": "block", "cn": "direct", "!cn": "proxy"}
+
+tags_path: str = ".vmessc/tags.json"
+
 
 class DomainList:
     def __init__(
@@ -33,19 +47,23 @@ class DomainList:
         data_dir: str = data_dir,
         entries: Sequence[tuple[str, str]] = entries,
         tags_dict: dict[str, str] = tags_dict,
-        config_path: str = ".vmessc/tags.json",
+        tags_path: str = tags_path,
     ):
         self.tags: dict[str, str] = dict()
         self.data_dir = data_dir
         self.entries = entries
         self.tags_dict = tags_dict
-        self.config_path = config_path
+        self.tags_path = tags_path
 
-    def load_all(self):
+    @property
+    def tags_provider(self):
+        return {"type": "data", "tags": self.tags}
+
+    def load_entries(self):
         for name, default_tag in self.entries:
-            self.load(name, default_tag)
+            self.load_entry(name, default_tag)
 
-    def load(self, name: str, default_tag: str):
+    def load_entry(self, name: str, default_tag: str):
         with open(self.data_dir + name, "r") as f:
             for line in f:
                 line = line.split("#", 1)[0].strip()
@@ -59,23 +77,32 @@ class DomainList:
                             tag = match[5] or default_tag
                             self.tags[host] = self.tags_dict[tag]
                         case "include":
-                            self.load(match[3], default_tag)
+                            self.load_entry(match[3], default_tag)
                         case _:
                             print("Skip unsupported command", line)
 
     def gen(self):
-        with open(self.config_path, "w") as f:
-            json.dump({"type": "data", "tags": self.tags}, f)
+        with open(self.tags_path, "w") as f:
+            json.dump(self.tags_provider, f)
 
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument("--data-dir", default=data_dir)
+    parser.add_argument("--tags-path", default=tags_path)
     parser.add_argument("command")
     args = parser.parse_args()
-    dl = DomainList()
+    dl = DomainList(
+        data_dir=args.data_dir,
+        tags_path=args.tags_path,
+    )
     match args.command:
         case "gen":
-            dl.load_all()
+            dl.load_entries()
             dl.gen()
         case command:
             raise Exception("Invalid command", command)
+
+
+if __name__ == "__main__":
+    main()

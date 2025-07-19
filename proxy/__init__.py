@@ -738,6 +738,9 @@ class Server:
 
         await self.inbound.start_server(inbound_callback)
 
+    def run(self):
+        aio.run(self.start_server())
+
 
 class Config(ABC):
     @classmethod

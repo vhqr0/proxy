@@ -10,9 +10,9 @@ import requests
 
 ## V2rayN Subscribe
 #
-# https://github.com/2dust/v2rayN/wiki/分享链接格式说明(ver-2)
+# https://github.com/2dust/v2rayN/wiki/Description-of-VMess-share-link
 #
-# Tree of dot dir:
+# Tree of .vmessc:
 #
 #   .vmessc/
 #     \_ sub.url                 # subscribe url
@@ -20,6 +20,12 @@ import requests
 #     \_ sub.bak/                # subscribe backup dir
 #          \_ #timestamp#.txt    # subscribe backup
 #     \_ outbound.json           # outbound config generated from subscribe
+
+
+url_path = ".vmessc/sub.url"
+content_path = ".vmessc/sub.txt"
+content_backup_dir = ".vmessc/sub.bak/"
+outbound_path = ".vmessc/outbound.json"
 
 
 @dataclass
@@ -41,20 +47,30 @@ class Node:
     fp: str = ""
 
     @property
-    def resolved_port(self) -> int:
-        return int(self.port)
-
-    @property
     def resolved_host(self) -> str:
         return self.host or self.add
+
+    @property
+    def resolved_port(self) -> int:
+        return int(self.port)
 
     @property
     def resolved_sni(self) -> str:
         return self.sni or self.resolved_host
 
     @property
+    def resolved_host_port(self) -> str:
+        return f"{self.resolved_host}:{self.resolved_port}"
+
+    @property
     def resolved_tls(self) -> bool:
-        return self.tls == "tls"
+        match self.tls:
+            case "":
+                return False
+            case "tls":
+                return True
+            case tls:
+                raise Exception("Invalid tls", tls)
 
     @property
     def ws_schema(self) -> str:
@@ -62,9 +78,7 @@ class Node:
 
     @property
     def ws_uri(self) -> str:
-        return (
-            f"{self.ws_schema}://{self.resolved_host}:{self.resolved_port}{self.path}"
-        )
+        return f"{self.ws_schema}://{self.resolved_host_port}{self.path}"
 
     @property
     def client_provider(self) -> dict:
@@ -82,8 +96,8 @@ class Node:
                     "port": self.resolved_port,
                     "uri": self.ws_uri,
                 }
-            case _:
-                raise Exception("Invalid net", self.net)
+            case net:
+                raise Exception("Invalid net", net)
         if self.resolved_tls:
             client_provider["ssl"] = True
             client_provider["server_hostname"] = self.resolved_sni
@@ -116,10 +130,10 @@ class Node:
 class Subscribe:
     def __init__(
         self,
-        url_path=".vmessc/sub.url",
-        content_path=".vmessc/sub.txt",
-        content_backup_dir=".vmessc/sub.bak/",
-        outbound_path=".vmessc/outbound.json",
+        url_path: str = url_path,
+        content_path: str = content_path,
+        content_backup_dir: str = content_backup_dir,
+        outbound_path: str = outbound_path,
     ):
         self.url_path = url_path
         self.content_path = content_path
@@ -181,9 +195,18 @@ class Subscribe:
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument("--url-path", default=url_path)
+    parser.add_argument("--content-path", default=content_path)
+    parser.add_argument("--content-backup-dir", default=content_backup_dir)
+    parser.add_argument("--outbound-path", default=outbound_path)
     parser.add_argument("command")
     args = parser.parse_args()
-    sub = Subscribe()
+    sub = Subscribe(
+        url_path=args.url_path,
+        content_path=args.content_path,
+        content_backup_dir=args.content_backup_dir,
+        outbound_path=args.outbound_path,
+    )
     match args.command:
         case "fetch":
             sub.fetch()

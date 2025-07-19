@@ -1,8 +1,8 @@
-from importlib import import_module
 from argparse import ArgumentParser
-import json
+from importlib import import_module
 import logging.config
-import asyncio as aio
+import json
+
 from proxy import ServerConfig
 
 
@@ -17,7 +17,7 @@ def main():
     logging.config.dictConfig(config["logger"])
     server = ServerConfig.from_data(config["server"])
     try:
-        aio.run(server.start_server())
+        server.run()
     except KeyboardInterrupt:
         pass
 
