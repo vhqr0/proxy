@@ -3,7 +3,16 @@ import websockets.asyncio.connection as ws_conn
 import websockets.asyncio.server as ws_server
 import websockets.asyncio.client as ws_client
 
-from proxy import *
+from proxy import (
+    AsyncWriter,
+    BufferedAsyncReader,
+    ServerCallback,
+    ClientCallback,
+    ServerProvider,
+    ClientProvider,
+    ServerProviderConfig,
+    ClientProviderConfig,
+)
 
 
 class WSReader(BufferedAsyncReader):
