@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from proxy import (
     AsyncReader,
     AsyncWriter,
-    BufferedAsyncReader,
+    AsyncBufferedReader,
     StructError,
     DictStruct,
     FixedFrame,
@@ -186,7 +186,7 @@ class VMessAuthError(StructError):
     pass
 
 
-class VMessReader(BufferedAsyncReader):
+class VMessReader(AsyncBufferedReader):
     def __init__(
         self,
         key: bytes,

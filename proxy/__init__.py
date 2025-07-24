@@ -101,7 +101,7 @@ class BufferedReader(Reader):
             self.peek_more()
 
 
-class BufferedAsyncReader(AsyncReader):
+class AsyncBufferedReader(AsyncReader):
     def __init__(self, buffer: bytes = b"", buffer_limit: int = 64 * 1024):
         self.buffer = buffer
         self.buffer_limit = buffer_limit

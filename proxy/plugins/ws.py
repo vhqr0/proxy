@@ -5,7 +5,7 @@ import websockets.asyncio.client as ws_client
 
 from proxy import (
     AsyncWriter,
-    BufferedAsyncReader,
+    AsyncBufferedReader,
     ServerCallback,
     ClientCallback,
     ServerProvider,
@@ -15,7 +15,7 @@ from proxy import (
 )
 
 
-class WSReader(BufferedAsyncReader):
+class WSReader(AsyncBufferedReader):
     def __init__(self, ws: ws_conn.Connection, **kwargs):
         self.ws = ws
         super().__init__(**kwargs)
