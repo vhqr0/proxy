@@ -18,6 +18,7 @@ from proxy import (
     StructError,
     DictStruct,
     FixedFrame,
+    Stream,
     ProxyClient,
     ProxyClientConfig,
     st_uint8,
