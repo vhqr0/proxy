@@ -18,7 +18,7 @@ from proxy import (
     StructError,
     DictStruct,
     FixedFrame,
-    Stream,
+    ProxyClientCallback,
     ProxyClient,
     ProxyClientConfig,
     st_uint8,
@@ -289,13 +289,18 @@ class VMessClient(ProxyClient):
     def __init__(self, id: VMessID):
         self.id = id
 
-    async def wrap(
-        self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
-    ) -> Stream:
+    async def handshake(
+        self,
+        reader: AsyncReader,
+        writer: AsyncWriter,
+        host: str,
+        port: int,
+        callback: ProxyClientCallback,
+    ):
         key, iv = randbytes(16), randbytes(16)
         rkey, riv = sha256_hash(key)[:16], sha256_hash(iv)[:16]
         verify = getrandbits(8)
-        return (
+        await callback(
             VMessReader(rkey, riv, verify, reader),
             VMessWriter(self.id, key, iv, verify, host, port, writer),
         )

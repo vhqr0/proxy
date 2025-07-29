@@ -520,7 +520,6 @@ st_http_line = WrapStruct(DelimitedFrame(b"\r\n"), str.encode, bytes.decode)
 st_uint8_var_str = WrapStruct(VarFrame(st_uint8), str.encode, bytes.decode)
 
 
-type Stream = tuple[AsyncReader, AsyncWriter]
 type StreamCallback = Callable[[AsyncReader, AsyncWriter], Awaitable]
 
 type ServerCallback = StreamCallback
@@ -569,29 +568,35 @@ class TCPClientProvider(ClientProvider):
             await writer.wait_closed()
 
 
-type ProxyClientStream = tuple[AsyncReader, AsyncWriter, str, int]
-type ProxyClientStreamCallback = Callable[
-    [AsyncReader, AsyncWriter, str, int], Awaitable
-]
+type ProxyServerCallback = Callable[[AsyncReader, AsyncWriter, str, int], Awaitable]
+type ProxyClientCallback = StreamCallback
 
 
 class ProxyServer(ABC):
     @abstractmethod
-    async def wrap(self, reader: AsyncReader, writer: AsyncWriter) -> ProxyClientStream:
-        """Wrap reader/writer to a new pair of reader/writer, and request host/port."""
+    async def handshake(
+        self,
+        reader: AsyncReader,
+        writer: AsyncWriter,
+        callback: ProxyServerCallback,
+    ):
         pass
 
 
 class ProxyClient(ABC):
     @abstractmethod
-    async def wrap(
-        self, reader: AsyncReader, writer: AsyncWriter, host: str, port: int
-    ) -> Stream:
-        """Wrap reader/writer to a new pair of reader/writer, connect to host/pair via target proxy server."""
+    async def handshake(
+        self,
+        reader: AsyncReader,
+        writer: AsyncWriter,
+        host: str,
+        port: int,
+        callback: ProxyClientCallback,
+    ):
         pass
 
 
-type InBoundCallback = ProxyClientStreamCallback
+type InBoundCallback = ProxyServerCallback
 type OutBoundCallback = StreamCallback
 
 
@@ -614,8 +619,7 @@ class ProxyInBound(InBound):
 
     async def start_server(self, callback: InBoundCallback):
         async def server_provider_callback(reader: AsyncReader, writer: AsyncWriter):
-            reader, writer, host, port = await self.proxy_server.wrap(reader, writer)
-            await callback(reader, writer, host, port)
+            await self.proxy_server.handshake(reader, writer, callback)
 
         await self.server_provider.start_server(server_provider_callback)
 
@@ -627,8 +631,7 @@ class ProxyOutBound(OutBound):
 
     async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
         async def client_provider_callback(reader: AsyncReader, writer: AsyncWriter):
-            reader, writer = await self.proxy_client.wrap(reader, writer, host, port)
-            await callback(reader, writer)
+            await self.proxy_client.handshake(reader, writer, host, port, callback)
 
         await self.client_provider.open_connection(client_provider_callback)
 
