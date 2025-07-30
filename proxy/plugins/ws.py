@@ -8,6 +8,7 @@ from proxy import (
     AsyncBufferedReader,
     ServerCallback,
     ClientCallback,
+    Stream,
     ServerProvider,
     ClientProvider,
     ServerProviderConfig,
@@ -47,7 +48,7 @@ class WSServerProvider(ServerProvider):
 
     async def start_server(self, callback: ServerCallback):
         async def ws_callback(ws: ws_conn.Connection):
-            await callback(WSReader(ws), WSWriter(ws))
+            await callback(Stream(WSReader(ws), WSWriter(ws)))
 
         server = await ws_server.serve(ws_callback, **self.kwargs)
         async with server:
@@ -60,7 +61,7 @@ class WSClientProvider(ClientProvider):
 
     async def open_connection(self, callback: ClientCallback):
         async with ws_client.connect(**self.kwargs) as ws:
-            await callback(WSReader(ws), WSWriter(ws))
+            await callback(Stream(WSReader(ws), WSWriter(ws)))
 
 
 class WSServerProviderConfig(ServerProviderConfig):

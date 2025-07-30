@@ -2,8 +2,6 @@ from hashlib import sha224
 from ipaddress import IPv4Address, IPv6Address
 
 from proxy import (
-    AsyncReader,
-    AsyncWriter,
     StructError,
     Struct,
     WrapStruct,
@@ -11,6 +9,8 @@ from proxy import (
     DictStruct,
     FixedFrame,
     VarFrame,
+    Stream,
+    ProxyRequest,
     ProxyClientCallback,
     ProxyServerCallback,
     ProxyServer,
@@ -92,23 +92,18 @@ class Socks5StructError(StructError):
 
 
 class Socks5Server(ProxyServer):
-    async def handshake(
-        self,
-        reader: AsyncReader,
-        writer: AsyncWriter,
-        callback: ProxyServerCallback,
-    ):
-        auth_req = await st_socks5_auth_req.read_async(reader)
+    async def handshake(self, stream: Stream, callback: ProxyServerCallback):
+        auth_req = await st_socks5_auth_req.read_async(stream.reader)
         if auth_req["ver"] != 5 or 0 not in auth_req["meths"]:
             raise Socks5StructError("Invalid socks5 auth req", auth_req)
         await st_socks5_auth_resp.pack_one_then_write_async(
-            writer, {"ver": 5, "meth": 0}
+            stream.writer, {"ver": 5, "meth": 0}
         )
-        req = await st_socks5_req.read_async(reader)
+        req = await st_socks5_req.read_async(stream.reader)
         if req["ver"] != 5 or req["cmd"] != 1:
             raise Socks5StructError("Invalid socks5 req", req)
         await st_socks5_resp.pack_one_then_write_async(
-            writer,
+            stream.writer,
             {
                 "ver": 5,
                 "status": 0,
@@ -116,37 +111,36 @@ class Socks5Server(ProxyServer):
                 "addr": {"atype": 1, "host": "0.0.0.0", "port": 0},
             },
         )
-        await callback(reader, writer, req["addr"]["host"], req["addr"]["port"])
+        request = ProxyRequest(req["addr"]["host"], req["addr"]["port"])
+        await callback(stream, request)
 
 
 class Socks5Client(ProxyClient):
     async def handshake(
         self,
-        reader: AsyncReader,
-        writer: AsyncWriter,
-        host: str,
-        port: int,
+        stream: Stream,
+        request: ProxyRequest,
         callback: ProxyClientCallback,
     ):
         await st_socks5_auth_req.pack_one_then_write_async(
-            writer, {"ver": 5, "meths": "\x00"}
+            stream.writer, {"ver": 5, "meths": "\x00"}
         )
-        auth_resp = await st_socks5_auth_resp.read_async(reader)
+        auth_resp = await st_socks5_auth_resp.read_async(stream.reader)
         if auth_resp["ver"] != 5 or auth_resp["meth"] != 0:
             raise Socks5StructError("Invalid socks5 auth resp", auth_resp)
         await st_socks5_req.pack_one_then_write_async(
-            writer,
+            stream.writer,
             {
                 "ver": 5,
                 "cmd": 1,
                 "rsv": 0,
-                "addr": {"atype": 3, "host": host, "port": port},
+                "addr": {"atype": 3, "host": request.host, "port": request.port},
             },
         )
-        resp = await st_socks5_resp.read_async(reader)
+        resp = await st_socks5_resp.read_async(stream.reader)
         if resp["ver"] != 5 or resp["status"] != 0:
             raise Socks5StructError("Invalid socks5 resp", resp)
-        await callback(reader, writer)
+        await callback(stream)
 
 
 st_trojan_req = DictStruct(
@@ -171,18 +165,14 @@ class TrojanServer(ProxyServer):
     def __init__(self, auth: str):
         self.auth = auth
 
-    async def handshake(
-        self,
-        reader: AsyncReader,
-        writer: AsyncWriter,
-        callback: ProxyServerCallback,
-    ):
-        req = await st_trojan_req.read_async(reader)
+    async def handshake(self, stream: Stream, callback: ProxyServerCallback):
+        req = await st_trojan_req.read_async(stream.reader)
         if req["cmd"] != 1 or req["rsv"] != "":
             raise TrojanStructError("Invlaid trojan req", req)
         if req["auth"] != self.auth:
             raise TrojanAuthError("Invalid trojan req", req)
-        await callback(reader, writer, req["addr"]["host"], req["addr"]["port"])
+        request = ProxyRequest(req["addr"]["host"], req["addr"]["port"])
+        await callback(stream, request)
 
 
 class TrojanClient(ProxyClient):
@@ -191,22 +181,20 @@ class TrojanClient(ProxyClient):
 
     async def handshake(
         self,
-        reader: AsyncReader,
-        writer: AsyncWriter,
-        host: str,
-        port: int,
+        stream: Stream,
+        request: ProxyRequest,
         callback: ProxyClientCallback,
     ):
         await st_trojan_req.pack_one_then_write_async(
-            writer,
+            stream.writer,
             {
                 "auth": self.auth,
                 "cmd": 1,
-                "addr": {"atype": 3, "host": host, "port": port},
+                "addr": {"atype": 3, "host": request.host, "port": request.port},
                 "rsv": b"",
             },
         )
-        await callback(reader, writer)
+        await callback(stream)
 
 
 class Socks5ServerConfig(ProxyServerConfig):

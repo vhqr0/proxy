@@ -1,9 +1,10 @@
 from typing import Any, Optional
 from collections.abc import Callable, Awaitable, Sequence
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import struct as format_struct
 from random import choice
-from logging import getLogger, Logger
+from logging import getLogger
 import json
 import io
 import asyncio as aio
@@ -520,7 +521,13 @@ st_http_line = WrapStruct(DelimitedFrame(b"\r\n"), str.encode, bytes.decode)
 st_uint8_var_str = WrapStruct(VarFrame(st_uint8), str.encode, bytes.decode)
 
 
-type StreamCallback = Callable[[AsyncReader, AsyncWriter], Awaitable]
+@dataclass
+class Stream:
+    reader: AsyncReader
+    writer: AsyncWriter
+
+
+type StreamCallback = Callable[[Stream], Awaitable]
 
 type ServerCallback = StreamCallback
 type ClientCallback = StreamCallback
@@ -545,7 +552,7 @@ class TCPServerProvider(ServerProvider):
     async def start_server(self, callback: ServerCallback):
         async def tcp_callback(reader: aio.StreamReader, writer: aio.StreamWriter):
             try:
-                await callback(AIOReader(reader), AIOWriter(writer))
+                await callback(Stream(AIOReader(reader), AIOWriter(writer)))
             finally:
                 writer.close()
                 await writer.wait_closed()
@@ -562,13 +569,19 @@ class TCPClientProvider(ClientProvider):
     async def open_connection(self, callback: ClientCallback):
         reader, writer = await aio.open_connection(**self.kwargs)
         try:
-            await callback(AIOReader(reader), AIOWriter(writer))
+            await callback(Stream(AIOReader(reader), AIOWriter(writer)))
         finally:
             writer.close()
             await writer.wait_closed()
 
 
-type ProxyServerCallback = Callable[[AsyncReader, AsyncWriter, str, int], Awaitable]
+@dataclass
+class ProxyRequest:
+    host: str
+    port: int
+
+
+type ProxyServerCallback = Callable[[Stream, ProxyRequest], Awaitable]
 type ProxyClientCallback = StreamCallback
 
 
@@ -576,8 +589,7 @@ class ProxyServer(ABC):
     @abstractmethod
     async def handshake(
         self,
-        reader: AsyncReader,
-        writer: AsyncWriter,
+        stream: Stream,
         callback: ProxyServerCallback,
     ):
         pass
@@ -587,10 +599,8 @@ class ProxyClient(ABC):
     @abstractmethod
     async def handshake(
         self,
-        reader: AsyncReader,
-        writer: AsyncWriter,
-        host: str,
-        port: int,
+        stream: Stream,
+        request: ProxyRequest,
         callback: ProxyClientCallback,
     ):
         pass
@@ -598,6 +608,15 @@ class ProxyClient(ABC):
 
 type InBoundCallback = ProxyServerCallback
 type OutBoundCallback = StreamCallback
+
+
+logger = getLogger("proxy")
+
+
+@dataclass
+class Request:
+    proxy: ProxyRequest
+    context: dict
 
 
 class InBound(ABC):
@@ -608,7 +627,11 @@ class InBound(ABC):
 
 class OutBound(ABC):
     @abstractmethod
-    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
+    async def open_connection(
+        self,
+        request: Request,
+        callback: OutBoundCallback,
+    ):
         pass
 
 
@@ -618,8 +641,8 @@ class ProxyInBound(InBound):
         self.proxy_server = proxy_server
 
     async def start_server(self, callback: InBoundCallback):
-        async def server_provider_callback(reader: AsyncReader, writer: AsyncWriter):
-            await self.proxy_server.handshake(reader, writer, callback)
+        async def server_provider_callback(stream: Stream):
+            await self.proxy_server.handshake(stream, callback)
 
         await self.server_provider.start_server(server_provider_callback)
 
@@ -629,23 +652,25 @@ class ProxyOutBound(OutBound):
         self.client_provider = client_provider
         self.proxy_client = proxy_client
 
-    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
-        async def client_provider_callback(reader: AsyncReader, writer: AsyncWriter):
-            await self.proxy_client.handshake(reader, writer, host, port, callback)
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
+        async def client_provider_callback(stream: Stream):
+            await self.proxy_client.handshake(stream, request.proxy, callback)
 
         await self.client_provider.open_connection(client_provider_callback)
 
 
 class BlockOutBound(OutBound):
-    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
-        _ = host, port, callback
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
+        _ = request, callback
 
 
 class DirectOutBound(OutBound):
-    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
-        reader, writer = await aio.open_connection(host, port)
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
+        reader, writer = await aio.open_connection(
+            request.proxy.host, request.proxy.port
+        )
         try:
-            await callback(AIOReader(reader), AIOWriter(writer))
+            await callback(Stream(AIOReader(reader), AIOWriter(writer)))
         finally:
             writer.close()
             await writer.wait_closed()
@@ -665,9 +690,9 @@ class RandDispatchOutBound(OutBound):
     def __init__(self, outbounds: Sequence[OutBound]):
         self.outbounds = list(outbounds)
 
-    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
         outbound = choice(self.outbounds)
-        await outbound.open_connection(host, port, callback)
+        await outbound.open_connection(request, callback)
 
 
 type Tag = str
@@ -697,47 +722,39 @@ class TagDispatchOutBound(OutBound):
     def match_tags(self, host: str) -> Tag:
         return match_tags(host, self.tags) or self.default_tag
 
-    async def open_connection(self, host: str, port: int, callback: OutBoundCallback):
-        outbound = self.outbounds[self.match_tags(host)]
-        await outbound.open_connection(host, port, callback)
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
+        outbound = self.outbounds[self.match_tags(request.proxy.host)]
+        await outbound.open_connection(request, callback)
 
 
 class Server:
-    def __init__(
-        self,
-        inbound: InBound,
-        outbound: OutBound,
-        logger: Optional[Logger] = None,
-    ):
+    def __init__(self, inbound: InBound, outbound: OutBound):
         self.inbound = inbound
         self.outbound = outbound
-        self.logger = logger or getLogger("proxy")
         self.tasks: set[aio.Task] = set()
 
     async def start_server(self):
-        async def inbound_callback(
-            in_reader: AsyncReader, in_writer: AsyncWriter, host: str, port: int
-        ):
-            self.logger.info("connect to %s %d", host, port)
+        async def inbound_callback(in_stream: Stream, request: ProxyRequest):
+            logger.info("connect to %s %d", request.host, request.port)
 
-            async def outbound_callback(
-                out_reader: AsyncReader, out_writer: AsyncWriter
-            ):
-                task1 = aio.create_task(pipe_async(in_reader, out_writer))
-                task2 = aio.create_task(pipe_async(out_reader, in_writer))
+            async def outbound_callback(out_stream: Stream):
+                task1 = aio.create_task(pipe_async(in_stream.reader, out_stream.writer))
+                task2 = aio.create_task(pipe_async(out_stream.reader, in_stream.writer))
                 for task in task1, task2:
                     self.tasks.add(task)
                     task.add_done_callback(self.tasks.discard)
                 try:
                     await aio.gather(task1, task2)
                 except Exception as e:
-                    self.logger.debug("except while piping: %s %s", type(e), e)
+                    logger.debug("except while piping: %s %s", type(e), e)
                 finally:
                     for task in task1, task2:
                         if not task.cancelled():
                             task.cancel()
 
-            await self.outbound.open_connection(host, port, outbound_callback)
+            await self.outbound.open_connection(
+                Request(request, dict()), outbound_callback
+            )
 
         await self.inbound.start_server(inbound_callback)
 
