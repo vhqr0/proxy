@@ -798,22 +798,25 @@ class Server:
         self.outbound = outbound
         self.tasks: set[aio.Task] = set()
 
+    async def pipe(self, in_stream: Stream, out_stream: Stream):
+        task1 = aio.create_task(pipe_async(in_stream.reader, out_stream.writer))
+        task2 = aio.create_task(pipe_async(out_stream.reader, in_stream.writer))
+        for task in task1, task2:
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
+        try:
+            await aio.gather(task1, task2)
+        except Exception as e:
+            logger.debug("except while piping: %s %s", type(e), e)
+        finally:
+            for task in task1, task2:
+                if not task.cancelled():
+                    task.cancel()
+
     async def start_server(self):
         async def inbound_callback(in_stream: Stream, request: ProxyRequest):
             async def outbound_callback(out_stream: Stream):
-                task1 = aio.create_task(pipe_async(in_stream.reader, out_stream.writer))
-                task2 = aio.create_task(pipe_async(out_stream.reader, in_stream.writer))
-                for task in task1, task2:
-                    self.tasks.add(task)
-                    task.add_done_callback(self.tasks.discard)
-                try:
-                    await aio.gather(task1, task2)
-                except Exception as e:
-                    logger.debug("except while piping: %s %s", type(e), e)
-                finally:
-                    for task in task1, task2:
-                        if not task.cancelled():
-                            task.cancel()
+                await self.pipe(in_stream, out_stream)
 
             await self.outbound.open_connection(
                 Request(request, dict()), outbound_callback
