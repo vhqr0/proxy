@@ -3,12 +3,15 @@ import websockets.asyncio.connection as ws_conn
 import websockets.asyncio.server as ws_server
 import websockets.asyncio.client as ws_client
 
-from proxy import (
+from proxy.struct import (
     AsyncWriter,
     AsyncBufferedReader,
+)
+
+from proxy import (
+    Stream,
     ServerCallback,
     ClientCallback,
-    Stream,
     ServerProvider,
     ClientProvider,
     ServerProviderConfig,

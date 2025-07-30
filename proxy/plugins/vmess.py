@@ -11,23 +11,26 @@ from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.primitives.ciphers.modes import ECB
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from proxy import (
+from proxy.struct import (
     AsyncReader,
     AsyncWriter,
     AsyncBufferedReader,
-    ProxyRequest,
-    Stream,
     StructError,
     DictStruct,
     FixedFrame,
-    ProxyClientCallback,
-    ProxyClient,
-    ProxyClientConfig,
     st_uint8,
     st_uint16_be,
     st_uint32_be,
     st_uint64_be,
     st_uint8_var_str,
+)
+
+from proxy import (
+    Stream,
+    ProxyRequest,
+    ProxyClientCallback,
+    ProxyClient,
+    ProxyClientConfig,
 )
 
 
