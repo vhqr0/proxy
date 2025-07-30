@@ -17,6 +17,9 @@ from proxy.struct import (
 )
 
 
+logger = getLogger("proxy")
+
+
 @dataclass
 class Stream:
     reader: AsyncReader
@@ -83,30 +86,20 @@ type ProxyClientCallback = StreamCallback
 
 class ProxyServer(ABC):
     @abstractmethod
-    async def handshake(
-        self,
-        stream: Stream,
-        callback: ProxyServerCallback,
-    ):
+    async def handshake(self, stream: Stream, callback: ProxyServerCallback):
         pass
 
 
 class ProxyClient(ABC):
     @abstractmethod
     async def handshake(
-        self,
-        stream: Stream,
-        request: ProxyRequest,
-        callback: ProxyClientCallback,
+        self, stream: Stream, request: ProxyRequest, callback: ProxyClientCallback
     ):
         pass
 
 
 type InBoundCallback = ProxyServerCallback
 type OutBoundCallback = StreamCallback
-
-
-logger = getLogger("proxy")
 
 
 @dataclass
@@ -123,11 +116,7 @@ class InBound(ABC):
 
 class OutBound(ABC):
     @abstractmethod
-    async def open_connection(
-        self,
-        request: Request,
-        callback: OutBoundCallback,
-    ):
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
         pass
 
 

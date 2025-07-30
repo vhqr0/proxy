@@ -120,10 +120,7 @@ class Socks5Server(ProxyServer):
 
 class Socks5Client(ProxyClient):
     async def handshake(
-        self,
-        stream: Stream,
-        request: ProxyRequest,
-        callback: ProxyClientCallback,
+        self, stream: Stream, request: ProxyRequest, callback: ProxyClientCallback
     ):
         await st_socks5_auth_req.pack_one_then_write_async(
             stream.writer, {"ver": 5, "meths": "\x00"}
@@ -183,10 +180,7 @@ class TrojanClient(ProxyClient):
         self.auth = auth
 
     async def handshake(
-        self,
-        stream: Stream,
-        request: ProxyRequest,
-        callback: ProxyClientCallback,
+        self, stream: Stream, request: ProxyRequest, callback: ProxyClientCallback
     ):
         await st_trojan_req.pack_one_then_write_async(
             stream.writer,

@@ -295,10 +295,7 @@ class VMessClient(ProxyClient):
         self.id = id
 
     async def handshake(
-        self,
-        stream: Stream,
-        request: ProxyRequest,
-        callback: ProxyClientCallback,
+        self, stream: Stream, request: ProxyRequest, callback: ProxyClientCallback
     ):
         key, iv = randbytes(16), randbytes(16)
         rkey, riv = sha256_hash(key)[:16], sha256_hash(iv)[:16]
