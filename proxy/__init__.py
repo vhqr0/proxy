@@ -1,6 +1,7 @@
 from typing import Any, Optional
 from collections.abc import Callable, Awaitable, Sequence
 from abc import ABC, abstractmethod
+from functools import reduce
 from dataclasses import dataclass
 import struct as format_struct
 from random import choice
@@ -695,6 +696,66 @@ class RandDispatchOutBound(OutBound):
         await outbound.open_connection(request, callback)
 
 
+type MiddleWareCallback = Callable[[Request], Awaitable]
+
+
+class MiddleWare(ABC):
+    @abstractmethod
+    async def open_connection(self, request: Request, callback: MiddleWareCallback):
+        pass
+
+
+class IdentityMiddleWare(MiddleWare):
+    async def open_connection(self, request: Request, callback: MiddleWareCallback):
+        await callback(request)
+
+
+class ComposeMiddleWare(MiddleWare):
+    def __init__(self, middleware1: MiddleWare, middleware2: MiddleWare):
+        self.middleware1 = middleware1
+        self.middleware2 = middleware2
+
+    @classmethod
+    def compose(cls, middlewares: Sequence[MiddleWare]) -> MiddleWare:
+        if len(middlewares) == 0:
+            return IdentityMiddleWare()
+        else:
+            return reduce(cls, middlewares)
+
+    async def open_connection(self, request: Request, callback: MiddleWareCallback):
+        async def middleware1_callback(request: Request):
+            await self.middleware2.open_connection(request, callback)
+
+        await self.middleware1.open_connection(request, middleware1_callback)
+
+
+class MiddleWareOutBound(OutBound):
+    def __init__(self, middleware: MiddleWare, outbound: OutBound):
+        self.middleware = middleware
+        self.outbound = outbound
+
+    async def open_connection(self, request: Request, callback: OutBoundCallback):
+        async def middleware_callback(request: Request):
+            await self.outbound.open_connection(request, callback)
+
+        await self.middleware.open_connection(request, middleware_callback)
+
+
+class LogMiddleWare(MiddleWare):
+    async def open_connection(self, request: Request, callback: MiddleWareCallback):
+        host = request.proxy.host
+        port = request.proxy.port
+        tag = request.context.get("tag", "default")
+        logger.info("connect to [%s] %s %d", tag, host, port)
+        try:
+            await callback(request)
+        except Exception as e:
+            logger.debug(
+                "except while connect to [%s] %s %d: %s %s", tag, host, port, type(e), e
+            )
+            raise
+
+
 type Tag = str
 type Tags = dict[str, Tag]
 
@@ -708,22 +769,26 @@ def match_tags(host: str, tags: Tags) -> Optional[Tag]:
         return match_tags(sp[1], tags)
 
 
-class TagDispatchOutBound(OutBound):
-    def __init__(
-        self,
-        tags: Tags,  # host -> tag
-        default_tag: Tag,
-        outbounds: dict[str, OutBound],  # tag -> outbound
-    ):
+class TagMiddleWare(MiddleWare):
+    def __init__(self, tags: Tags, default_tag: Tag):
         self.tags = tags
         self.default_tag = default_tag
-        self.outbounds = outbounds
 
     def match_tags(self, host: str) -> Tag:
         return match_tags(host, self.tags) or self.default_tag
 
+    async def open_connection(self, request: Request, callback: MiddleWareCallback):
+        tag = self.match_tags(request.proxy.host)
+        request.context["tag"] = tag
+        await callback(request)
+
+
+class TagDispatchOutBound(OutBound):
+    def __init__(self, outbounds: dict[Tag, OutBound]):
+        self.outbounds = outbounds
+
     async def open_connection(self, request: Request, callback: OutBoundCallback):
-        outbound = self.outbounds[self.match_tags(request.proxy.host)]
+        outbound = self.outbounds[request.context["tag"]]
         await outbound.open_connection(request, callback)
 
 
@@ -735,8 +800,6 @@ class Server:
 
     async def start_server(self):
         async def inbound_callback(in_stream: Stream, request: ProxyRequest):
-            logger.info("connect to %s %d", request.host, request.port)
-
             async def outbound_callback(out_stream: Stream):
                 task1 = aio.create_task(pipe_async(in_stream.reader, out_stream.writer))
                 task2 = aio.create_task(pipe_async(out_stream.reader, in_stream.writer))
@@ -941,6 +1004,49 @@ class RandDispatchOutBoundConfig(OutBoundConfig):
         return cls.from_kwargs(**data)
 
 
+class MiddleWareConfig(RegistrableConfig):
+    registry = dict()
+
+    @classmethod
+    @abstractmethod
+    def from_data(cls, data: dict) -> MiddleWare:
+        pass
+
+
+class LogMiddleWareConfig(MiddleWareConfig):
+    type = "log"
+
+    @classmethod
+    def from_kwargs(cls) -> LogMiddleWare:
+        return LogMiddleWare()
+
+    @classmethod
+    def from_data(cls, data: dict) -> LogMiddleWare:
+        return cls.from_kwargs(**data)
+
+
+class MiddleWareOutBoundConfig(OutBoundConfig):
+    type = "middleware"
+
+    @classmethod
+    def from_kwargs(
+        cls, middlewares: Sequence[dict], outbound: dict
+    ) -> MiddleWareOutBound:
+        return MiddleWareOutBound(
+            middleware=ComposeMiddleWare.compose(
+                [
+                    MiddleWareConfig.from_data_by_type(middleware)
+                    for middleware in middlewares
+                ]
+            ),
+            outbound=OutBoundConfig.from_data_by_type(outbound),
+        )
+
+    @classmethod
+    def from_data(cls, data: dict) -> MiddleWareOutBound:
+        return cls.from_kwargs(**data)
+
+
 class TagsProviderConfig(RegistrableConfig):
     registry = dict()
 
@@ -979,16 +1085,27 @@ class DataTagsProviderConfig(TagsProviderConfig):
         return cls.from_kwargs(**data)
 
 
+class TagMiddleWareConfig(MiddleWareConfig):
+    type = "tag"
+
+    @classmethod
+    def from_kwargs(cls, tags: dict, default_tag: Tag) -> TagMiddleWare:
+        return TagMiddleWare(
+            tags=TagsProviderConfig.from_data_by_type(tags),
+            default_tag=default_tag,
+        )
+
+    @classmethod
+    def from_data(cls, data: dict) -> TagMiddleWare:
+        return cls.from_kwargs(**data)
+
+
 class TagDispatchOutBoundConfig(OutBoundConfig):
     type = "tag_dispatch"
 
     @classmethod
-    def from_kwargs(
-        cls, tags: dict, default_tag: Tag, outbounds: dict[str, dict]
-    ) -> TagDispatchOutBound:
+    def from_kwargs(cls, outbounds: dict[Tag, dict]) -> TagDispatchOutBound:
         return TagDispatchOutBound(
-            tags=TagsProviderConfig.from_data_by_type(tags),
-            default_tag=default_tag,
             outbounds={
                 tag: OutBoundConfig.from_data_by_type(outbound)
                 for tag, outbound in outbounds.items()

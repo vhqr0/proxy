@@ -14,25 +14,34 @@
       "proxy_server": { "type": "socks5" }
     },
     "outbound": {
-      "type": "tag_dispatch",
-      "tags": {
-        "type": "data",
-        "tags": { "google.com": "proxy", "ads.google.com": "block" }
-      },
-      "default_tag": "direct",
-      "outbounds": {
-        "block": { "type": "block" },
-        "direct": { "type": "direct" },
-        "proxy": {
-          "type": "proxy",
-          "client_provider": {
-            "type": "tcp",
-            "host": "localhost",
-            "port": 10086
+      "type": "middleware",
+      "middlewares": [
+        {
+          "type": "tag",
+          "tags": {
+            "type": "data",
+            "tags": { "google.com": "proxy", "ads.google.com": "block" }
           },
-          "proxy_client": {
-            "type": "vmess",
-            "id": "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+          "default_tag": "direct"
+        },
+        { "type": "log" }
+      ],
+      "outbound": {
+        "type": "tag_dispatch",
+        "outbounds": {
+          "block": { "type": "block" },
+          "direct": { "type": "direct" },
+          "proxy": {
+            "type": "proxy",
+            "client_provider": {
+              "type": "tcp",
+              "host": "localhost",
+              "port": 10086
+            },
+            "proxy_client": {
+              "type": "vmess",
+              "id": "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+            }
           }
         }
       }

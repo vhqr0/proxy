@@ -13,6 +13,14 @@
       "server_provider": { "type": "tcp", "port": 1080 },
       "proxy_server": { "type": "socks5" }
     },
-    "outbound": { "type": "direct" }
+    "outbound": {
+      "type": "middleware",
+      "middlewares": [{ "type": "log" }],
+      "outbound": {
+        "type": "middleware",
+        "middlewares": [{ "type": "log" }],
+        "outbound": { "type": "direct" }
+      }
+    }
   }
 }

@@ -18,13 +18,22 @@
       "proxy_server": { "type": "socks5" }
     },
     "outbound": {
-      "type": "tag_dispatch",
-      "tags": { "type": "json", "path": ".vmessc/tags.json" },
-      "default_tag": "direct",
-      "outbounds": {
-        "direct": { "type": "direct" },
-        "block": { "type": "block" },
-        "proxy": { "type": "json", "path": ".vmessc/outbound.json" }
+      "type": "middleware",
+      "middlewares": [
+        {
+          "type": "tag",
+          "tags": { "type": "json", "path": ".vmessc/tags.json" },
+          "default_tag": "direct"
+        },
+        { "type": "log" }
+      ],
+      "outbound": {
+        "type": "tag_dispatch",
+        "outbounds": {
+          "direct": { "type": "direct" },
+          "block": { "type": "block" },
+          "proxy": { "type": "json", "path": ".vmessc/outbound.json" }
+        }
       }
     }
   }
