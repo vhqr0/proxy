@@ -126,10 +126,10 @@ class ProxyInBound(InBound):
         self.proxy_server = proxy_server
 
     async def start_server(self, callback: InBoundCallback):
-        async def server_provider_callback(stream: Stream):
+        async def server_callback(stream: Stream):
             await self.proxy_server.handshake(stream, callback)
 
-        await self.server_provider.start_server(server_provider_callback)
+        await self.server_provider.start_server(server_callback)
 
 
 class ProxyOutBound(OutBound):
@@ -138,10 +138,10 @@ class ProxyOutBound(OutBound):
         self.proxy_client = proxy_client
 
     async def open_connection(self, request: Request, callback: OutBoundCallback):
-        async def client_provider_callback(stream: Stream):
+        async def client_callback(stream: Stream):
             await self.proxy_client.handshake(stream, request.proxy, callback)
 
-        await self.client_provider.open_connection(client_provider_callback)
+        await self.client_provider.open_connection(client_callback)
 
 
 class BlockOutBound(OutBound):
@@ -166,9 +166,8 @@ class MultiInBound(InBound):
         self.inbounds = inbounds
 
     async def start_server(self, callback: InBoundCallback):
-        await aio.gather(
-            *map(lambda inbound: inbound.start_server(callback), self.inbounds)
-        )
+        coros = [inbound.start_server(callback) for inbound in self.inbounds]
+        await aio.gather(*coros)
 
 
 class RandDispatchOutBound(OutBound):
@@ -226,17 +225,18 @@ class MiddleWareOutBound(OutBound):
 
 
 class LogMiddleWare(MiddleWare):
+    connect_log = "connect to [%s] %s %d"
+    connect_except_log = "except while connecting to [%s] %s %d: %s %s"
+
     async def open_connection(self, request: Request, callback: MiddleWareCallback):
         host = request.proxy.host
         port = request.proxy.port
         tag = request.context.get("tag", "default")
-        logger.info("connect to [%s] %s %d", tag, host, port)
+        logger.info(self.connect_log, tag, host, port)
         try:
             await callback(request)
         except Exception as e:
-            logger.debug(
-                "except while connect to [%s] %s %d: %s %s", tag, host, port, type(e), e
-            )
+            logger.debug(self.connect_except_log, tag, host, port, type(e), e)
             raise
 
 
@@ -277,34 +277,38 @@ class TagDispatchOutBound(OutBound):
 
 
 class Server:
+
+    pipe_except_log = "except while piping: %s %s"
+
     def __init__(self, inbound: InBound, outbound: OutBound):
         self.inbound = inbound
         self.outbound = outbound
         self.tasks: set[aio.Task] = set()
 
     async def pipe(self, in_stream: Stream, out_stream: Stream):
-        task1 = aio.create_task(pipe_async(in_stream.reader, out_stream.writer))
-        task2 = aio.create_task(pipe_async(out_stream.reader, in_stream.writer))
-        for task in task1, task2:
+        tasks = (
+            aio.create_task(pipe_async(in_stream.reader, out_stream.writer)),
+            aio.create_task(pipe_async(out_stream.reader, in_stream.writer)),
+        )
+        for task in tasks:
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
         try:
-            await aio.gather(task1, task2)
+            await aio.gather(*tasks)
         except Exception as e:
-            logger.debug("except while piping: %s %s", type(e), e)
+            logger.debug(self.pipe_except_log, type(e), e)
         finally:
-            for task in task1, task2:
+            for task in tasks:
                 if not task.cancelled():
                     task.cancel()
 
     async def start_server(self):
-        async def inbound_callback(in_stream: Stream, request: ProxyRequest):
+        async def inbound_callback(in_stream: Stream, proxy: ProxyRequest):
             async def outbound_callback(out_stream: Stream):
                 await self.pipe(in_stream, out_stream)
 
-            await self.outbound.open_connection(
-                Request(request, dict()), outbound_callback
-            )
+            request = Request(proxy, dict())
+            await self.outbound.open_connection(request, outbound_callback)
 
         await self.inbound.start_server(inbound_callback)
 
@@ -604,19 +608,6 @@ class TagDispatchOutBoundConfig(OutBoundConfig):
         return cls.from_kwargs(**data)
 
 
-class ServerConfig(Config):
-    @classmethod
-    def from_kwargs(cls, inbound: dict, outbound: dict) -> Server:
-        return Server(
-            inbound=InBoundConfig.from_data_by_type(inbound),
-            outbound=OutBoundConfig.from_data_by_type(outbound),
-        )
-
-    @classmethod
-    def from_data(cls, data: dict) -> Server:
-        return cls.from_kwargs(**data)
-
-
 class JsonConfig(RegistrableConfig):
     type = "json"
 
@@ -640,3 +631,16 @@ class JsonOutBoundConfig(JsonConfig, OutBoundConfig):
 
 class JsonTagsProviderConfig(JsonConfig, TagsProviderConfig):
     pass
+
+
+class ServerConfig(Config):
+    @classmethod
+    def from_kwargs(cls, inbound: dict, outbound: dict) -> Server:
+        return Server(
+            inbound=InBoundConfig.from_data_by_type(inbound),
+            outbound=OutBoundConfig.from_data_by_type(outbound),
+        )
+
+    @classmethod
+    def from_data(cls, data: dict) -> Server:
+        return cls.from_kwargs(**data)
