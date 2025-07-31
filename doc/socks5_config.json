@@ -16,11 +16,7 @@
     "outbound": {
       "type": "middleware",
       "middlewares": [{ "type": "log" }],
-      "outbound": {
-        "type": "middleware",
-        "middlewares": [{ "type": "log" }],
-        "outbound": { "type": "direct" }
-      }
+      "outbound": { "type": "direct" }
     }
   }
 }

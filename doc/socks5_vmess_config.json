@@ -14,15 +14,19 @@
       "proxy_server": { "type": "socks5" }
     },
     "outbound": {
-      "type": "proxy",
-      "client_provider": {
-        "type": "tcp",
-        "host": "localhost",
-        "port": 10086
-      },
-      "proxy_client": {
-        "type": "vmess",
-        "id": "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+      "type": "middleware",
+      "middlewares": [{ "type": "log" }],
+      "outbound": {
+        "type": "proxy",
+        "client_provider": {
+          "type": "tcp",
+          "host": "localhost",
+          "port": 10086
+        },
+        "proxy_client": {
+          "type": "vmess",
+          "id": "23ad6b10-8d1a-40f7-8ad0-e3e35cd38297"
+        }
       }
     }
   }

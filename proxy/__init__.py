@@ -151,14 +151,10 @@ class BlockOutBound(OutBound):
 
 class DirectOutBound(OutBound):
     async def open_connection(self, request: Request, callback: OutBoundCallback):
-        reader, writer = await aio.open_connection(
-            request.proxy.host, request.proxy.port
+        client_provider = TCPClientProvider(
+            host=request.proxy.host, port=request.proxy.port
         )
-        try:
-            await callback(Stream(AIOReader(reader), AIOWriter(writer)))
-        finally:
-            writer.close()
-            await writer.wait_closed()
+        await client_provider.open_connection(callback)
 
 
 class MultiInBound(InBound):
