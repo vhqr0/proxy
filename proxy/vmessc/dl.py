@@ -45,11 +45,11 @@ class DomainList:
         tags_dict: dict[str, str] = tags_dict,
         tags_path: str = tags_path,
     ):
-        self.tags: dict[str, str] = dict()
         self.data_dir = data_dir
         self.entries = entries
         self.tags_dict = tags_dict
         self.tags_path = tags_path
+        self.tags: dict[str, str] = dict()
 
     @property
     def tags_provider(self):
@@ -81,26 +81,27 @@ class DomainList:
         with open(self.tags_path, "w") as f:
             json.dump(self.tags_provider, f)
 
+    @classmethod
+    def from_args(cls):
+        parser = ArgumentParser()
+        parser.add_argument("--data-dir", default=data_dir)
+        parser.add_argument("--entries", type=json.loads, default=entries)
+        parser.add_argument("--tags-dict", type=json.loads, default=tags_dict)
+        parser.add_argument("--tags-path", default=tags_path)
+        args = parser.parse_args()
+        return cls(
+            data_dir=args.data_dir,
+            entries=args.entries,
+            tags_dict=args.tags_dict,
+            tags_path=args.tags_path,
+        )
 
-def main():
-    parser = ArgumentParser()
-    parser.add_argument("--data-dir", default=data_dir)
-    parser.add_argument("--entries", type=json.loads, default=entries)
-    parser.add_argument("--tags-dict", type=json.loads, default=tags_dict)
-    parser.add_argument("--tags-path", default=tags_path)
-    parser.add_argument("command")
-    args = parser.parse_args()
-    dl = DomainList(
-        data_dir=args.data_dir,
-        tags_path=args.tags_path,
-    )
-    match args.command:
-        case "gen":
-            dl.load()
-            dl.gen()
-        case command:
-            raise Exception("Invalid command", command)
+    @classmethod
+    def main(cls):
+        dl = cls.from_args()
+        dl.load()
+        dl.gen()
 
 
 if __name__ == "__main__":
-    main()
+    DomainList.main()

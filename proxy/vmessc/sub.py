@@ -165,24 +165,23 @@ class Subscribe:
             with open(path, "w") as f:
                 f.write(content)
 
-    def load(self) -> Sequence[Node]:
+    def load(self):
         with open(self.content_path, "r") as f:
-            return Node.parse(f.read())
+            self._nodes = Node.parse(f.read())
 
-    @staticmethod
-    def list_nodes(nodes: Sequence[Node]):
-        for i, node in enumerate(nodes):
-            print(i, node)
+    @property
+    def nodes(self) -> Sequence[Node]:
+        if not hasattr(self, "_nodes"):
+            self.load()
+        return self._nodes
 
     def list(self):
-        nodes = self.load()
-        self.list_nodes(nodes)
+        for i, node in enumerate(self.nodes):
+            print(i, node)
 
     def gen(self):
-        nodes = self.load()
-        self.list_nodes(nodes)
         select = input("select: ")
-        outbounds = [nodes[int(i)].outbound for i in select.split()]
+        outbounds = [self.nodes[int(i)].outbound for i in select.split()]
         if len(outbounds) == 0:
             raise Exception("No nodes are selected")
         elif len(outbounds) == 1:
@@ -192,31 +191,40 @@ class Subscribe:
         with open(self.outbound_path, "w") as f:
             json.dump(outbound, f)
 
+    def run(self, command: str):
+        match command:
+            case "fetch":
+                self.fetch()
+            case "list":
+                self.list()
+            case "gen":
+                self.list()
+                self.gen()
+            case _:
+                raise Exception("Invalid command", command)
 
-def main():
-    parser = ArgumentParser()
-    parser.add_argument("--url-path", default=url_path)
-    parser.add_argument("--content-path", default=content_path)
-    parser.add_argument("--content-backup-dir", default=content_backup_dir)
-    parser.add_argument("--outbound-path", default=outbound_path)
-    parser.add_argument("command")
-    args = parser.parse_args()
-    sub = Subscribe(
-        url_path=args.url_path,
-        content_path=args.content_path,
-        content_backup_dir=args.content_backup_dir,
-        outbound_path=args.outbound_path,
-    )
-    match args.command:
-        case "fetch":
-            sub.fetch()
-        case "list":
-            sub.list()
-        case "gen":
-            sub.gen()
-        case command:
-            raise Exception("Invalid command", command)
+    @classmethod
+    def from_args(cls):
+        parser = ArgumentParser()
+        parser.add_argument("--url-path", default=url_path)
+        parser.add_argument("--content-path", default=content_path)
+        parser.add_argument("--content-backup-dir", default=content_backup_dir)
+        parser.add_argument("--outbound-path", default=outbound_path)
+        parser.add_argument("command")
+        args = parser.parse_args()
+        sub = Subscribe(
+            url_path=args.url_path,
+            content_path=args.content_path,
+            content_backup_dir=args.content_backup_dir,
+            outbound_path=args.outbound_path,
+        )
+        return sub, args.command
+
+    @classmethod
+    def main(cls):
+        sub, command = cls.from_args()
+        sub.run(command)
 
 
 if __name__ == "__main__":
-    main()
+    Subscribe.main()
