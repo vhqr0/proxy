@@ -122,7 +122,6 @@ class BufferedReader(Reader, CommonBufferedReader):
 
 
 class AsyncBufferedReader(AsyncReader, CommonBufferedReader):
-
     @abstractmethod
     async def read1_async(self) -> bytes:
         pass

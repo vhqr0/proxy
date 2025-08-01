@@ -302,9 +302,20 @@ class VMessClient(ProxyClient):
         verify = getrandbits(8)
         await callback(
             Stream(
-                VMessReader(rkey, riv, verify, stream.reader),
+                VMessReader(
+                    key=rkey,
+                    iv=riv,
+                    verify=verify,
+                    reader=stream.reader,
+                ),
                 VMessWriter(
-                    self.id, key, iv, verify, request.host, request.port, stream.writer
+                    id=self.id,
+                    key=key,
+                    iv=iv,
+                    verify=verify,
+                    host=request.host,
+                    port=request.port,
+                    writer=stream.writer,
                 ),
             )
         )
