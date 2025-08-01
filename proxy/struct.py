@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Optional, Any
 from collections.abc import Callable, Sequence
 from abc import ABC, abstractmethod
 from struct import Struct as _Struct
@@ -56,88 +56,103 @@ class BufferIncompleteReadError(EOFError):
     pass
 
 
-class BufferedReader(Reader):
+class CommonBufferedReader:
     def __init__(self, buffer: bytes = b"", buffer_limit: int = 64 * 1024):
         self.buffer = buffer
         self.buffer_limit = buffer_limit
 
+    def check_buffer_limit(self):
+        if len(self.buffer) >= self.buffer_limit:
+            raise BufferLimitOverrunError()
+
+    def extend_buffer(self, b: bytes):
+        if len(b) == 0:
+            raise BufferIncompleteReadError()
+        self.buffer += b
+
+    def maybe_pop_all(self) -> Optional[bytes]:
+        if len(self.buffer) > 0:
+            b, self.buffer = self.buffer, b""
+            return b
+
+    def maybe_pop_exactly(self, n: int) -> Optional[bytes]:
+        if len(self.buffer) >= n:
+            b = self.buffer[:n]
+            self.buffer = self.buffer[n:]
+            return b
+
+    def maybe_pop_until(self, sep: bytes) -> Optional[bytes]:
+        sp = self.buffer.split(sep, 1)
+        if len(sp) == 2:
+            b, self.buffer = sp
+            return b
+
+
+class BufferedReader(Reader, CommonBufferedReader):
     @abstractmethod
     def read1(self) -> bytes:
         pass
 
     def peek_more(self):
-        if len(self.buffer) >= self.buffer_limit:
-            raise BufferLimitOverrunError()
-        b = self.read1()
-        if len(b) == 0:
-            raise BufferIncompleteReadError()
-        self.buffer += b
+        self.check_buffer_limit()
+        self.extend_buffer(self.read1())
 
     def read(self) -> bytes:
-        if len(self.buffer) == 0:
-            return self.read1()
-        else:
-            b = self.buffer
-            self.buffer = b""
+        b = self.maybe_pop_all()
+        if b is not None:
             return b
+        else:
+            return self.read1()
 
     def readexactly(self, n: int) -> bytes:
         while True:
-            if len(self.buffer) >= n:
-                b = self.buffer[:n]
-                self.buffer = self.buffer[n:]
+            b = self.maybe_pop_exactly(n)
+            if b is not None:
                 return b
-            self.peek_more()
+            else:
+                self.peek_more()
 
     def readuntil(self, sep: bytes) -> bytes:
         while True:
-            sp = self.buffer.split(sep, 1)
-            if len(sp) == 2:
-                b, self.buffer = sp
+            b = self.maybe_pop_until(sep)
+            if b is not None:
                 return b
-            self.peek_more()
+            else:
+                self.peek_more()
 
 
-class AsyncBufferedReader(AsyncReader):
-    def __init__(self, buffer: bytes = b"", buffer_limit: int = 64 * 1024):
-        self.buffer = buffer
-        self.buffer_limit = buffer_limit
+class AsyncBufferedReader(AsyncReader, CommonBufferedReader):
 
     @abstractmethod
     async def read1_async(self) -> bytes:
         pass
 
     async def peek_more_async(self):
-        if len(self.buffer) >= self.buffer_limit:
-            raise BufferLimitOverrunError()
-        b = await self.read1_async()
-        if len(b) == 0:
-            raise BufferIncompleteReadError()
-        self.buffer += b
+        self.check_buffer_limit()
+        self.extend_buffer(await self.read1_async())
 
     async def read_async(self) -> bytes:
-        if len(self.buffer) == 0:
-            return await self.read1_async()
-        else:
-            b = self.buffer
-            self.buffer = b""
+        b = self.maybe_pop_all()
+        if b is not None:
             return b
+        else:
+            return await self.read1_async()
 
     async def readexactly_async(self, n: int) -> bytes:
         while True:
-            if len(self.buffer) >= n:
-                b = self.buffer[:n]
-                self.buffer = self.buffer[n:]
+            b = self.maybe_pop_exactly(n)
+            if b is not None:
                 return b
-            await self.peek_more_async()
+            else:
+                await self.peek_more_async()
 
     async def readuntil_async(self, sep: bytes) -> bytes:
         while True:
-            sp = self.buffer.split(sep, 1)
-            if len(sp) == 2:
-                b, self.buffer = sp
+            b = self.maybe_pop_until(sep)
+            if b is not None:
                 return b
-            await self.peek_more_async()
+            else:
+                await self.peek_more_async()
 
 
 class Writer(ABC):
@@ -404,14 +419,16 @@ class FixedFrame(Frame):
     async def read_async(self, reader: AsyncReader) -> bytes:
         return await reader.readexactly_async(self.length)
 
-    def write(self, writer: Writer, data: bytes):
+    def check_data_length(self, data):
         if len(data) != self.length:
             raise InvalidFixedFrameLengthError()
+
+    def write(self, writer: Writer, data: bytes):
+        self.check_data_length(data)
         writer.write(data)
 
     async def write_async(self, writer: AsyncWriter, data: bytes):
-        if len(data) != self.length:
-            raise InvalidFixedFrameLengthError()
+        self.check_data_length(data)
         await writer.write_async(data)
 
 
