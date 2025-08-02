@@ -278,16 +278,28 @@ class VMessWriter(AsyncWriter):
         )
         return req + randbytes(plen)
 
+    async def write1_async(self, data: bytes):
+        if self.wait_req:
+            self.wait_req = False
+            req = self.gen_req()
+            ereq = self.id.encrypt_req(req)
+            edata = self.cryptor.encrypt_with_len(data)
+            await self.writer.write_async(ereq + edata)
+        else:
+            await self.writer.write_async(self.cryptor.encrypt_with_len(data))
+
     async def write_async(self, data: bytes):
         if len(data) > 0:
-            if self.wait_req:
-                self.wait_req = False
-                req = self.gen_req()
-                ereq = self.id.encrypt_req(req)
-                edata = self.cryptor.encrypt_with_len(data)
-                await self.writer.write_async(ereq + edata)
-            else:
-                await self.writer.write_async(self.cryptor.encrypt_with_len(data))
+            await self.write1_async(data)
+
+    async def close(self):
+        await self.write1_async(b"")
+
+    async def ensure_closed(self):
+        try:
+            await self.close()
+        except Exception:
+            pass
 
 
 class VMessClient(ProxyClient):
@@ -300,25 +312,25 @@ class VMessClient(ProxyClient):
         key, iv = randbytes(16), randbytes(16)
         rkey, riv = sha256_hash(key)[:16], sha256_hash(iv)[:16]
         verify = getrandbits(8)
-        await callback(
-            Stream(
-                VMessReader(
-                    key=rkey,
-                    iv=riv,
-                    verify=verify,
-                    reader=stream.reader,
-                ),
-                VMessWriter(
-                    id=self.id,
-                    key=key,
-                    iv=iv,
-                    verify=verify,
-                    host=request.host,
-                    port=request.port,
-                    writer=stream.writer,
-                ),
-            )
+        reader = VMessReader(
+            key=rkey,
+            iv=riv,
+            verify=verify,
+            reader=stream.reader,
         )
+        writer = VMessWriter(
+            id=self.id,
+            key=key,
+            iv=iv,
+            verify=verify,
+            host=request.host,
+            port=request.port,
+            writer=stream.writer,
+        )
+        try:
+            await callback(Stream(reader, writer))
+        finally:
+            await writer.ensure_closed()
 
 
 class VMessClientConfig(ProxyClientConfig):
