@@ -1,0 +1,32 @@
+{
+  "plugins": ["proxy.plugins.socks5", "proxy.plugins.http"],
+  "logger": {
+    "version": 1,
+    "handlers": {
+      "console": { "class": "logging.StreamHandler", "level": "DEBUG" }
+    },
+    "loggers": { "proxy": { "level": "DEBUG", "handlers": ["console"] } }
+  },
+  "server": {
+    "inbound": {
+      "type": "multi",
+      "inbounds": [
+        {
+          "type": "proxy",
+          "server_provider": { "type": "tcp", "port": 1080 },
+          "proxy_server": { "type": "socks5" }
+        },
+        {
+          "type": "proxy",
+          "server_provider": { "type": "tcp", "port": 1081 },
+          "proxy_server": { "type": "http" }
+        }
+      ]
+    },
+    "outbound": {
+      "type": "middleware",
+      "middlewares": [{ "type": "log" }],
+      "outbound": { "type": "direct" }
+    }
+  }
+}

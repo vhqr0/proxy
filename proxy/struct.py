@@ -263,7 +263,7 @@ class Struct(ABC):
         bio = io.BytesIO(b)
         bio_reader = IOReader(bio)
         data = self.read(bio_reader)
-        if bio.tell() != len(b):
+        if not (bio.tell() == len(b) and len(bio_reader.buffer) == 0):
             raise InvalidUnpackError()
         return data
 
@@ -271,7 +271,7 @@ class Struct(ABC):
         bio = io.BytesIO(b)
         bio_reader = IOReader(bio)
         data = list()
-        while bio.tell() != len(b):
+        while not (bio.tell() == len(b) and len(bio_reader.buffer) == 0):
             data.append(self.read(bio_reader))
         return data
 

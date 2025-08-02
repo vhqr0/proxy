@@ -2,6 +2,7 @@
   "plugins": [
     "proxy.plugins.ws",
     "proxy.plugins.socks5",
+    "proxy.plugins.http",
     "proxy.plugins.vmess"
   ],
   "logger": {
@@ -13,9 +14,19 @@
   },
   "server": {
     "inbound": {
-      "type": "proxy",
-      "server_provider": { "type": "tcp", "port": 1080 },
-      "proxy_server": { "type": "socks5" }
+      "type": "multi",
+      "inbounds": [
+        {
+          "type": "proxy",
+          "server_provider": { "type": "tcp", "port": 1080 },
+          "proxy_server": { "type": "socks5" }
+        },
+        {
+          "type": "proxy",
+          "server_provider": { "type": "tcp", "port": 1081 },
+          "proxy_server": { "type": "http" }
+        }
+      ]
     },
     "outbound": {
       "type": "middleware",
