@@ -40,7 +40,7 @@ re_hostport = re.compile(r"^([^:]*)(:(.*))?$")
 re_bracketed_hostport = re.compile(r"^\[([^\[\]]*)\](:(.*))?$")
 
 
-def split_hostport(hostport: str, default_port=80) -> tuple[str, int]:
+def split_hostport(hostport: str, default_port=443) -> tuple[str, int]:
     if hostport[0] == "[":
         match = re_bracketed_hostport.match(hostport)
     else:

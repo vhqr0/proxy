@@ -551,7 +551,7 @@ class MultiTagsProviderConfig(TagsProviderConfig):
         tags: Tags = dict()
         for provider in providers:
             provider_tags: Tags = TagsProviderConfig.from_data_by_type(provider)
-            for host, tag in provider_tags:
+            for host, tag in provider_tags.items():
                 tags[host] = tag
         return tags
 

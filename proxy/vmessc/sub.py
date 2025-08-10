@@ -146,7 +146,7 @@ class Subscribe:
 
     @property
     def timestamp(self) -> str:
-        return datetime.datetime.now().isoformat()
+        return datetime.datetime.now().isoformat().replace(":", "-")
 
     @property
     def url(self) -> str:
